@@ -6,6 +6,7 @@ See also `guide.md` sections 1 to 3 for TOC, alkalinity, soft sensor, turbidity,
 
 ## Water terms
 
+- **Hydrologic, hydrology (general knowledge).** About how water moves through the land: rain and snow falling, snow melting, runoff into streams, river flow, groundwater seeping out, evaporation. "Hydrologic monitoring data" here means the snowpack (SWE), precipitation, and river flow (cfs) records; "hydrologic events" are the melt flushes, thunderstorms, and drought baseflow that change the river and, with it, TOC and alkalinity.
 - **Snowpack.** Snow lying on the mountains through winter. In the Colorado Front Range most of the year's water arrives as snowmelt, so the snowpack is the real reservoir.
 - **SWE, snow water equivalent.** If this snow melted right now, how deep a layer of water would it make? Depth of snow is useless (powder vs packed), so SWE is the measurement. A peak of 9.0 means nine inches of water sitting on the hillside as snow.
 - **SNOTEL.** The federal network of automated mountain snow stations ("snow telemetry"). Jake used Michigan Creek (station 937) until the Sep 4 update replaced it over bad spring 2026 readings; the shipped replacement CSV matches Hoosier Pass (531) while the notebooks name Buckskin Joe (938). One point in a large watershed: a proxy for the basin, not the basin.
