@@ -14,7 +14,7 @@ what we build. Ranking rule and status values are in [`README.md`](README.md).
 | [Q1](#q1-is-arrival-volume-really-the-staffing-driver) | Is arrival volume really the staffing driver, or is it chemistry at a given volume? | High | High | Cassidi |
 | [Q2](#q2-does-a-foothills-intake-volume-series-exist) | Does a Foothills intake or treated-volume series exist, and can we have it? | High | High | Jake |
 | [Q3](#q3-four-hours-or-several-days) | Four hours or several days? The travel-time contradiction. | High | High | Data first, then Jake |
-| [Q4](#q4-what-are-the-dates-of-the-2023-storm) | What are the dates of the 2023 South Platte storm, and what did the gages show? | Med | High | Cassidi, then data |
+| [Q4](#q4-what-are-the-dates-of-the-2023-storm) | What are the dates of the 2023 South Platte storm? Candidate found: 2023-08-01. | Low | High | Cassidi, to confirm |
 | [Q5](#q5-replay-live-or-forecast) | Is the digital twin they want a replay, a live view, or a forecast? | Med | High | Cassidi |
 | [Q6](#q6-how-much-lead-time-changes-a-decision) | How much lead time actually changes a decision? | Med | High | Cassidi, plant ops |
 | [Q7](#q7-what-counts-as-an-event) | What counts as an event, operationally? | Med | High | Us, then validate |
@@ -43,6 +43,25 @@ our filters to handle" — filters offline, massive cleaning, production slowed
 (`../../content/sme-qa-cleaned.md`). That is a *quality* failure arriving on a
 volume event. Which of the two they would have wanted warning about is exactly the
 open part.
+
+**The data now cuts against us harder.** On the candidate date for that storm
+(2023-08-01, see Q4) the volume signal is unremarkable and the quality signal is
+the largest in the record:
+
+| | 2023-08-01 | For comparison |
+|---|---|---|
+| `Turbidity_Max` | **477** | highest in the whole record; next is 329 on 2026-08-15 |
+| `Turbidity_Median` | **47.3** | record median-of-daily-medians 3.3; p99 29.8 |
+| `Flow_CFS` | **647** | 2023 snowmelt peak 1090; record peak 1390 on 2024-06-21 |
+
+A volume threshold would not have fired on the worst day Foothills has seen. A
+turbidity threshold would have fired unmistakably. The caveat is that the June
+peaks are snowmelt — a gradual, expected ramp — so this contrasts an anticipated
+rise against an acute shock rather than two like events.
+
+Note also the TOC response at the plant: `data/FoothillsInfluent.csv` is flat on
+8/1 (2.3) and climbs to 3.3 by 8/5, which is at least consistent with a multi-day
+arrival lag and is a free test case for Q3.
 
 **What would answer it.** Ask directly: when you staff up for an incoming event,
 what number are you reacting to? Then ask what a high-flow, clean-water event does
@@ -101,8 +120,21 @@ from upstream data, we have our demo and our validation case in one.
 2022-04-01, so it may be in the window. It may also be the August 14–15 storm the
 3D map already replays (`README.md`) — a different event, different year.
 
-**What would answer it.** Exact dates from Cassidi, then pull the gage record and
-see whether the signature is there. Also ask: "you knew it was coming but not the
+**We pulled the gage record, and there is a signature.** 2023-08-01 carries the
+highest `Turbidity_Max` in the entire committed record, 477 in
+`data/USGS_South_Platte.csv`, against a record median-of-daily-medians of 3.3. The
+daily median that day is 47.3, above the record p99 of 29.8. `Flow_CFS` rises
+515 → 647 over 7/31–8/1 in `data/SouthPlatteFlow.csv` and is back to 420 by 8/3.
+It is a sharp, short, high-turbidity event in the right year — consistent with the
+account, though we matched it ourselves and they never gave a date.
+
+August turbidity spikes recur: 2026-08-15 (329), 2024-08-06 (321), 2022-08-15
+(285). So the map's August 14–15 replay is a *different* event of the same kind,
+not this one.
+
+**What still would answer it.** Confirm the date with Cassidi — this stays a
+candidate until they say so, and we should not present it as the event. Then ask
+the follow-up their own phrasing invites: "you knew it was coming but not the
 scale" — what would have told you the scale?
 
 ---

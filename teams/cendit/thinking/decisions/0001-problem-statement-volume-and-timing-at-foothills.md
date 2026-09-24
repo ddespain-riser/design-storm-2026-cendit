@@ -92,26 +92,22 @@ change" is a question with an answer, not just a picture.
 
 ## Open questions
 
-Most of these need an SME; a few we can settle against the data.
+These now live in the [question register](../questions/open-questions.md), ranked
+and kept current as new content lands. The five originally listed here became Q1,
+Q2, Q3, Q6, and Q10; the SME session added the rest.
 
-1. **Is arrival volume actually the driver of staffing, or is it variability in
-   chemistry at a given volume?** Highest-value question to ask. Our whole framing
-   rests on our answer being "volume matters".
-2. **We have no plant-intake volume in this repo.** `data/FoothillsInfluent.csv`
-   carries TOC and alkalinity only; the nearest volume signal is `Flow_CFS` at the
-   South Platte gauge above Strontia. Does Denver Water have treated-volume or
-   intake-flow records, and can we get them? If not, we must be explicit that
-   gauge flow is a proxy and that Strontia's storage and releases sit between it
-   and the plant.
-3. **What lag do we use, and does the data support it?** The materials disagree in
-   an interesting way: Denver Water's raw water group models about four hours from
-   the sensor above Strontia to the plant intake, while Jake's models predict best
-   with upstream readings lagged days — he attributes this to mixing and
-   deposition in the reservoir and asks that the exact number not be leaned on
-   (`guide.md` §1). Since arrival timing *is* our deliverable, this tension is our
-   central technical problem rather than a detail.
-4. **How much lead time is enough to change a staffing decision?** A model with 12
-   hours of warning and one with 4 days are different products.
-5. **Is 2022-04 onward enough history?** Four water years may not contain enough
-   distinct events. Extending it means API pulls (`README.md`, public data
-   resources), and pulled values are provisional.
+Two of them bear on whether this record survives, and the register carries the
+evidence in full:
+
+- **[Q1](../questions/open-questions.md#q1-is-arrival-volume-really-the-staffing-driver)
+  challenges the premise.** The SME's worked example of a near-shutdown is a
+  *quality* failure, and the gage record for the candidate date agrees: 2023-08-01
+  is the highest turbidity in the committed record while its flow is unremarkable
+  against the snowmelt peaks. A volume framing would not have caught the worst day
+  Foothills has seen. If Cassidi confirms that reading, this record should be
+  superseded rather than patched.
+- **[Q2](../questions/open-questions.md#q2-does-a-foothills-intake-volume-series-exist)
+  is a gap in the target variable.** We have committed to arrival volume at
+  Foothills and the repo does not contain it.
+
+Until those are answered, this record stays **Proposed**.
