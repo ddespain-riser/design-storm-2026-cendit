@@ -190,7 +190,7 @@ than anything Denver Water asked for.
 These live in the [question register](../questions/open-questions.md), ranked and
 kept current as new content lands. The ones that now gate this record:
 
-- ~~**[Q20](../questions/open-questions.md#q20-what-are-the-strontia-gate-heights)** —
+- ~~**[Q20](../questions/open-questions.md#resolved)** —
   the four gate elevations, or permission to model them. Blocks Phase 2.~~
   **Answered.** See Consequences.
 - **[Q21](../questions/open-questions.md#q21-what-continuous-data-exists-that-is-not-in-the-repo)** —
@@ -200,7 +200,7 @@ kept current as new content lands. The ones that now gate this record:
   as a validation target.
 - **Is anything measured at the intake tower itself?** Would settle the
   sonde-is-not-at-the-gates limitation directly.
-- **[Q14](../questions/open-questions.md#q14-do-reservoir-releases-decide-what-arrives)** —
+- **[Q14](../questions/open-questions.md#q14-spill-or-divert-and-who-chooses)** —
   whether releases are an operator's choice, which is now the mechanism we are
   studying rather than a confound.
 

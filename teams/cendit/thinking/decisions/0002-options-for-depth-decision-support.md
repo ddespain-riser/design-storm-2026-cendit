@@ -17,7 +17,7 @@ What changed since 0001 was written:
 **The gate depths are known.** Cassidi gave them: **15, 45, 65 and 95 ft below the
 surface**, with **45 ft as the default** and the others closed
 (`../../content/depth-interview-notes.md`). This answers
-[Q20](../questions/open-questions.md#q20-what-are-the-strontia-gate-heights) and
+[Q20](../questions/open-questions.md#resolved) and
 un-gates Phase 2 of 0001. The pool is held very stable because Strontia sits
 directly above treatment, so the depth-to-gate mapping needs no storage correction
 to first order.
