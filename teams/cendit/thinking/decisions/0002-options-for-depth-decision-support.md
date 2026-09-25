@@ -1,6 +1,7 @@
 # 0002. Options for operator-facing depth decision support
 
-- **Status:** Proposed
+- **Status:** Proposed, amended by [0003](0003-prototype-priorities.md), which re-ranks
+  O1–O8 as B1–B9 against what the prototype already builds
 - **Date:** 2026-09-25
 - **Deciders:** team cendit
 
