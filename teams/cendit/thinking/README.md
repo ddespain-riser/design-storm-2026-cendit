@@ -10,6 +10,12 @@ Denver Water's originals. Two kinds, because they answer opposite questions.
   prioritized register of what we still do not know, ranked by how much the
   answer would change what we build. It is supposed to churn.
 
+One file sits outside both, on purpose:
+[`problem-options-from-jake.md`](problem-options-from-jake.md) — candidate
+problem statements drawn from the 2026-09-25 Jake interview, for the team to
+choose between. It stops existing as a live document once a decision record
+picks one.
+
 The two are linked in both directions. A decision's open questions belong in the
 register; a resolved question usually either feeds an existing decision or forces
 a new one.
