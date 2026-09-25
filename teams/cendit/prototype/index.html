@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snow to Foothills: cendit Scenario 3 prototype</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="title">
+    <h1>Snow to Foothills</h1>
+    <span class="sub">How water and water quality move from Hoosier Pass snow to the Foothills intake · team cendit · Scenario 3 prototype</span>
+  </div>
+  <nav id="tabs" role="tablist">
+    <button data-mode="replay" class="active" role="tab">Replay</button>
+    <button data-mode="live" role="tab">Live</button>
+    <button data-mode="forecast" role="tab">Forecast</button>
+    <button data-mode="depth" role="tab">Reservoir depth</button>
+    <button data-mode="years" role="tab">Years</button>
+    <button data-mode="lags" role="tab">Lags &amp; skill</button>
+  </nav>
+</header>
+
+<main>
+  <section id="journey-wrap" class="card">
+    <div class="card-head">
+      <h2 id="journey-title">The journey</h2>
+      <span id="journey-date" class="pill"></span>
+      <span id="journey-badge" class="pill warn hidden">provisional</span>
+    </div>
+    <svg id="journey" viewBox="0 0 1200 286" preserveAspectRatio="xMidYMid meet" aria-label="Schematic of the collection system"></svg>
+    <p id="story" class="story"></p>
+    <details class="blind">
+      <summary>Blind spots: what each stretch measures, and what it doesn't</summary>
+      <p class="note">Jake (2026-09-25): "we have a lot of data"... "that one sensor... in the river"... "we have a huge collection system that we're not getting."
+        His top problem was more frequent readings, and working out where more instruments would give the most value.</p>
+      <table>
+        <tr><th>Stretch</th><th style="text-align:left">Measured (in this prototype)</th><th style="text-align:left">Not measured</th></tr>
+        <tr><td>Snowpack</td><td class="l">1 SNOTEL pillow in the model (Hoosier Pass 531). The 3D map shows 11</td><td class="l">Basin-wide snow. One pillow is a proxy (Q17)</td></tr>
+        <tr><td>Roberts Tunnel / North Fork</td><td class="l">Nothing</td><td class="l">Volume and quality of the Dillon water entering 2 km above the gage</td></tr>
+        <tr><td>Cheesman</td><td class="l">Daily storage (DWR CHERESCO)</td><td class="l">Releases, water quality, depth profile</td></tr>
+        <tr><td>River above Strontia</td><td class="l">One USGS sonde, 06707525 (15-min, used as daily): turbidity, conductance, pH, temperature, DO. Flow from DWR PLASPLCO</td><td class="l">TOC and alkalinity directly. Jake says a fluorescence organic-matter sensor is being tested. Individual tributaries, burn-scar runoff</td></tr>
+        <tr><td>Strontia Springs</td><td class="l">Daily storage. Profiling sonde since spring 2026 (see Reservoir depth)</td><td class="l">Which of the 4 gates is drawing, gate heights, releases, Aurora's withdrawal</td></tr>
+        <tr><td>Conduit 26</td><td class="l">Nothing</td><td class="l">Anything in transit (about 4 h)</td></tr>
+        <tr><td>Foothills intake</td><td class="l">TOC and alkalinity, measured by operators twice a day (Jake). The data file is daily</td><td class="l">Not public, so it can't be shown live</td></tr>
+      </table>
+      <p class="note">Open question for Denver Water: which single added sensor would buy the most lead time or the most accuracy? Blending water from different sources (Jake) needs quality data for those sources, and we don't have it.</p>
+    </details>
+  </section>
+
+  <!-- Replay -->
+  <section id="view-replay" class="view">
+    <div class="card controls">
+      <button id="play" title="Play / pause (space)">▶</button>
+      <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Day">
+      <select id="speed" title="Playback speed">
+        <option value="400">slow</option>
+        <option value="150" selected>normal</option>
+        <option value="40">fast</option>
+      </select>
+      <button id="prev-event" title="Previous event">◀ event</button>
+      <select id="event-jump"></select>
+      <button id="next-event" title="Next event">event ▶</button>
+      <label class="inline">window
+        <select id="window">
+          <option value="30">±30 d</option>
+          <option value="60" selected>±60 d</option>
+          <option value="120">±120 d</option>
+          <option value="0">all</option>
+        </select>
+      </label>
+    </div>
+    <div class="grid">
+      <div class="card"><div id="lanes"></div></div>
+      <aside>
+        <div class="card">
+          <h3>Heads-up from past days like this one</h3>
+          <div id="replay-analogs"></div>
+        </div>
+        <div class="card">
+          <h3>What a model would have said on this day</h3>
+          <p class="note">Lab result known on the selected day, plus upstream changes, projected <em>h</em> days ahead.
+            Compared with <b>persistence</b> (tomorrow = today's lab value) and what the lab actually found.</p>
+          <div id="hindcast"></div>
+        </div>
+        <div class="card">
+          <h3>Events <span id="event-count" class="pill"></span></h3>
+          <p class="note">Our rule, not Denver Water's (register Q7): a day is a trigger if turbidity daily max is above
+            the chosen percentile of the record, <b>or</b> the 3-day flow rise is. Triggers within the gap merge into one event.</p>
+          <div class="sliders">
+            <label>turbidity max ≥ p<output id="turb-p-out"></output><input id="turb-p" type="range" min="90" max="99.9" step="0.1" value="99"></label>
+            <label>3-day flow rise ≥ p<output id="flow-p-out"></output><input id="flow-p" type="range" min="90" max="99.9" step="0.1" value="98"></label>
+            <label>merge gap <output id="gap-out"></output> d<input id="gap" type="range" min="0" max="10" step="1" value="3"></label>
+          </div>
+          <div id="events"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- Live -->
+  <section id="view-live" class="view hidden">
+    <div class="card controls">
+      <button id="live-refresh">Refresh live data</button>
+      <span id="live-status" class="note"></span>
+    </div>
+    <div class="grid">
+      <div class="card"><div id="live-lanes"></div></div>
+      <aside>
+        <div class="card">
+          <h3>Sources</h3>
+          <ul class="note" id="live-sources">
+            <li>USGS NWIS daily stats, gage 06707525 above Strontia</li>
+            <li>Colorado DWR telemetry: PLASPLCO flow, CHERESCO and STRRESCO storage</li>
+            <li>NRCS SNOTEL Hoosier Pass (531) SWE</li>
+            <li>NOAA GHCN USC00058022 precipitation (lags a day or more)</li>
+            <li>NWS forecast and alerts at Strontia Springs Dam</li>
+          </ul>
+          <p class="note">Foothills TOC and alkalinity are grab samples in Denver Water's lab. No public API has them.</p>
+        </div>
+        <div class="card"><h3>Weather ahead</h3><div id="live-weather"></div></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- Forecast -->
+  <section id="view-forecast" class="view hidden">
+    <div class="grid">
+      <div class="card">
+        <h3>Next 7 days at the Foothills intake</h3>
+        <p class="note" id="fc-basis"></p>
+        <div class="lab-inputs">
+          <label>This morning's plant TOC (mg/L) <input id="fc-toc" type="number" step="0.01" min="0"></label>
+          <label>This morning's plant alkalinity (mg/L) <input id="fc-alk" type="number" step="0.1" min="0"></label>
+          <label>reading date <input id="fc-labdate" type="date"></label>
+          <button id="fc-run">Project</button>
+        </div>
+        <p class="note">Operators measure TOC and alkalinity at the plant twice a day (Jake, 2026-09-25). Type in the latest reading.
+          The default is the last value in the committed file. The shaded +4 d column is the window Jake says they need to act.</p>
+        <div id="fc-charts"></div>
+        <div id="fc-table"></div>
+      </div>
+      <aside>
+        <div class="card"><h3>Heads-up from past days like today</h3><div id="fc-analogs"></div></div>
+        <div class="card"><h3>Weather ahead at Strontia</h3><div id="fc-weather"></div></div>
+        <div class="card">
+          <h3>Read this before trusting it</h3>
+          <ul class="note" id="fc-caveats"></ul>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- Reservoir depth -->
+  <section id="view-depth" class="view hidden">
+    <div class="card controls">
+      <label class="inline">parameter <select id="dp-param"></select></label>
+      <span class="inline note">Strontia gates, ft below surface:</span>
+      <label class="inline">G1 <input id="gate0" class="gate" type="number" min="0" max="157" step="5" value="15"></label>
+      <label class="inline">G2 <input id="gate1" class="gate" type="number" min="0" max="157" step="5" value="45"></label>
+      <label class="inline">G3 <input id="gate2" class="gate" type="number" min="0" max="157" step="5" value="65"></label>
+      <label class="inline">G4 <input id="gate3" class="gate" type="number" min="0" max="157" step="5" value="95"></label>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h3>Strontia Springs water column, day by day</h3>
+        <p class="note" id="dp-note"></p>
+        <div id="dp-heat"></div>
+        <h3 style="margin-top:12px">What each gate would have drawn</h3>
+        <div id="dp-gates"></div>
+      </div>
+      <aside>
+        <div class="card"><h3>Which gate had the best water?</h3><div id="dp-best"></div></div>
+        <div class="card"><h3>Stratification (register Q18)</h3><div id="dp-strat"></div></div>
+        <div class="card">
+          <h3>Read this first</h3>
+          <ul class="note">
+            <li>Strontia has 4 gates at different heights (Jake). The defaults, 15, 45, 65 and 95 ft, are the team's gate depths, read as feet below the water surface. Only the 45 ft gate is open, so everything Foothills measured came through it. You can change the other three.</li>
+            <li>Depth is below the water surface, and the surface moves with storage, so a real gate's depth drifts.</li>
+            <li>One sonde, one location. It was installed spring 2026 and the file covers 2026-04-07 to 08-19, with gaps.</li>
+            <li>"Best" is lowest turbidity, chlorophyll or phycocyanin, or highest oxygen. It isn't TOC, which the sonde doesn't measure.</li>
+            <li>Units marked "as logged" are as the file gives them. The sheet doesn't name them.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h3>What if Foothills drew from a different gate?</h3>
+        <p class="note" id="wf-intro"></p>
+        <div class="controls">
+          <label class="inline">compare the open gate with <select id="wf-gate"></select></label>
+        </div>
+        <div id="wf-charts"></div>
+      </div>
+      <aside>
+        <div class="card"><h3>Every gate, over the whole record</h3><div id="wf-table"></div></div>
+        <div class="card"><h3>Does the plant look like 45 ft water?</h3><div id="wf-evidence"></div></div>
+        <div class="card">
+          <h3>How the what-if works</h3>
+          <ul class="note" id="wf-method"></ul>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- Years -->
+  <section id="view-years" class="view hidden">
+    <div class="card controls">
+      <label class="inline">variable
+        <select id="yr-var"></select>
+      </label>
+      <span class="note">Each line is one water year (Oct 1 to Sep 30), coloured by its provisional snow label.</span>
+    </div>
+    <div class="grid">
+      <div class="card"><div id="yr-chart"></div></div>
+      <aside>
+        <div class="card"><h3>Water-year labels</h3><div id="yr-table"></div></div>
+        <div class="card"><h3>Hoosier Pass peak SWE, every year</h3><div id="yr-peaks"></div></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- Lags -->
+  <section id="view-lags" class="view hidden">
+    <div class="card controls">
+      <label class="inline">target <select id="lag-target"><option value="toc">TOC</option><option value="alk">alkalinity</option></select></label>
+      <label class="inline">season <select id="lag-season"></select></label>
+    </div>
+    <div class="grid two">
+      <div class="card">
+        <h3>How far back does the river tell you about the plant?</h3>
+        <p class="note">Spearman correlation between an upstream reading <em>L</em> days earlier and the Foothills lab value.
+          This is the signal clock. The water clock is about 4 hours from the sentinel gage to the intake, according to Denver Water's raw water group (guide.md §1).</p>
+        <div id="lag-chart"></div>
+        <div id="lag-table"></div>
+      </div>
+      <div class="card">
+        <h3>Lead time against accuracy</h3>
+        <p class="note">Test error by horizon. Every model trains on the first half of the record and is tested on the second.
+          Upstream-only = soft sensor from river, snow and season. Hybrid = last lab result + upstream changes.</p>
+        <div id="skill-chart"></div>
+        <div id="skill-text" class="note"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p><b>Data terms.</b> Water quality data is provisional, "as is", Copyright 2026 Denver Water. Any sale, reproduction or distribution
+    of this information or products derived from it is expressly prohibited. Full notices: <code>data/TERMS.md</code>.
+    USGS, DWR, NRCS, NOAA and NWS data are public domain and provisional. Rules marked "ours" are team cendit's, not Denver Water's.</p>
+  <p>Run: <code>python teams/cendit/prototype/build_data.py</code> then <code>python teams/cendit/prototype/server.py</code>.</p>
+</footer>
+<div id="tooltip" class="tooltip hidden"></div>
+<script src="app.js"></script>
+</body>
+</html>
