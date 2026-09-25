@@ -33,3 +33,4 @@ Not our conclusions about any of it. Those go in [`../thinking/`](../thinking/).
 |---|---|
 | [`sme-qa-transcript.md`](sme-qa-transcript.md) | Raw auto-generated transcript of the Denver Water SME Q&A. |
 | [`sme-qa-cleaned.md`](sme-qa-cleaned.md) | The same session, edited for readability. |
+| [`jake-interview-transcript.md`](jake-interview-transcript.md) | Raw auto-generated transcript of the 2026-09-25 interview with Jake. Machine transcription; names, numbers, and speaker turns are unreliable. |
