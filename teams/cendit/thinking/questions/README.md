@@ -15,7 +15,7 @@ a new decision lands, and retired the moment it is answered.
 
 ## How a question is ranked
 
-Two axes, judged against what [decision 0001](../decisions/0001-problem-statement-volume-and-timing-at-foothills.md)
+Two axes, judged against what [decision 0001](../decisions/0001-problem-statement-strontia-withdrawal-depth.md)
 says we are building.
 
 - **Uncertainty** — how little we can predict the answer. A question we could

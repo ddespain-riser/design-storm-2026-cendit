@@ -3,7 +3,7 @@
 - **Date:** 2026-09-25
 - **Status:** For team discussion. Nothing here is decided. When one wins, it
   becomes a decision record and supersedes or amends
-  [0001](decisions/0001-problem-statement-volume-and-timing-at-foothills.md).
+  [0001](decisions/0001-problem-statement-strontia-withdrawal-depth.md).
 - **Source:** [`../content/jake-interview-transcript.md`](../content/jake-interview-transcript.md)
 
 **Read the source caveat first.** That transcript is machine-generated and badly

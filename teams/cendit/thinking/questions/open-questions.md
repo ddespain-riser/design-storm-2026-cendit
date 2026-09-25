@@ -1,10 +1,12 @@
 # Open questions
 
 - **Updated:** 2026-09-25
-- **Working from:** [decision 0001](../decisions/0001-problem-statement-volume-and-timing-at-foothills.md)
-  — volume and timing of water arriving at Foothills, retrospective first.
-  **0001 is now under real pressure** (Q1, Q2); the candidate replacements are in
-  [`../problem-options-from-jake.md`](../problem-options-from-jake.md).
+- **Working from:** [decision 0001](../decisions/0001-problem-statement-strontia-withdrawal-depth.md)
+  — which depth to withdraw from at Strontia Springs to send the cleanest water to
+  Foothills, water-column characterization first. **0001 pivoted on 2026-09-25**
+  away from arrival volume; the options it was chosen from are in
+  [`../problem-options-from-jake.md`](../problem-options-from-jake.md). The ranking
+  below still reflects the old framing and needs a pass.
 
 What team cendit does not know yet, ranked by how much the answer would change
 what we build. Ranking rule and status values are in [`README.md`](README.md).

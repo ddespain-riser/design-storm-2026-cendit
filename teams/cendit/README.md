@@ -12,7 +12,7 @@ Our documents are split by where they come from.
 - [`thinking/`](thinking/) — **what we made of it.** Our conclusions and our gaps.
   - [`decisions/`](thinking/decisions/) — what we decided about scope and intent,
     and why. Start at
-    [0001](thinking/decisions/0001-problem-statement-volume-and-timing-at-foothills.md)
+    [0001](thinking/decisions/0001-problem-statement-strontia-withdrawal-depth.md)
     for the problem statement we are working from.
   - [`questions/`](thinking/questions/) — what we still do not know, ranked by how
     much the answer would change what we build.

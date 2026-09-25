@@ -36,4 +36,4 @@ moved is the useful part.
 
 | # | Title | Status |
 |---|-------|--------|
-| [0001](0001-problem-statement-volume-and-timing-at-foothills.md) | Problem statement: volume and timing of water arriving at Foothills | Proposed |
+| [0001](0001-problem-statement-strontia-withdrawal-depth.md) | Problem statement: which depth to withdraw from at Strontia Springs | Proposed |
