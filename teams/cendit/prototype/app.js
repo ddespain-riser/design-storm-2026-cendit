@@ -843,7 +843,7 @@ function renderDepth() {
     ${gates.map((g, k) => `<tr><td><span style="color:${GATE_COLORS[k]}">G${k + 1}</span> ${feet[k]} ft</td><td>${fmt(med(perGate[k]), 2)}</td><td>${fmt(p90(perGate[k]), 2)}</td>${P.better ? `<td>${wins[k]} d</td>` : ''}</tr>`).join('')}</table>
     <p class="note">${P.better ? `Best = ${P.better === 'low' ? 'lowest' : 'highest'} ${P.label.toLowerCase()} on each of the ${compared} days where all four gates have a reading.`
       : `No better-or-worse direction is assumed for ${P.label.toLowerCase()}. Pick turbidity, oxygen, chlorophyll or phycocyanin to see a "best gate".`}
-    This is the "look at water quality by level" view Jake asked for. It doesn't recommend a gate.</p>`;
+    This is the "look at water quality by level" view Jake asked for. The gate advisor above turns turbidity into a daily gate suggestion.</p>`;
 
   // stratification
   const diff = range(0, nDays - 1).map((d) => { const tb = topBottom(d); return tb ? tb.top - tb.bottom : null; });
@@ -857,6 +857,7 @@ function renderDepth() {
   }));
   if (last != null) sb.insertAdjacentHTML('beforeend', `<p class="note">Last reading ${iso(start + last * DAY)}: ${fmt(diff[last])} °C top-to-bottom. Compare with near zero for a mixed column; data after ${S.end} would be needed to see turnover (Q18).</p>`);
   renderWhatIf();
+  renderAdvisor();
 }
 
 // ---------- gate what-if ----------
@@ -974,6 +975,100 @@ function renderWhatIf() {
   ].map((t) => `<li>${t}</li>`).join('');
 }
 
+// ---------- gate advisor ----------
+const TURB_CONCERN = 10;  // Jake, 2026-09-25: above 10 NTU is a concern
+const LAYERS = [0, 1, 2];  // ± 1 m bins, i.e. 1, 3 and 5 m withdrawal layers (decision 0002, O2)
+const LAYER_M = LAYERS.map((w) => 2 * w + 1);
+
+function layerAt(grid, d, z, w) {
+  const row = grid[d];
+  if (!row) return null;
+  const vals = row.slice(Math.max(0, z - w), z + w + 1).filter((v) => v != null).sort((a, b) => a - b);
+  return vals.length ? quantile(vals, 0.5) : sondeAt(grid, d, z);
+}
+// Turbidity only: each gate's sonde turbidity that day, in 1, 3 and 5 m layers, compared with the open gate.
+function advise(d, bins) {
+  const grid = T.sonde.params.turb.grid, zOpen = T.gate.openBin, ms = parseDay(T.sonde.start) + d * DAY;
+  const zs = [...bins, zOpen];
+  const turb = zs.map((z) => LAYERS.map((w) => layerAt(grid, d, z, w)));
+  if (turb.some((t) => t.some((v) => v == null))) return null;
+  const openT = turb[zs.length - 1];
+  const rows = bins.map((z, k) => ({ k, z, turb: turb[k], mid: turb[k][1], wins: turb[k].filter((v, i) => v < openT[i]).length }));
+  const open = { turb: openT, mid: openT[1] };
+  const best = rows.filter((r) => r.z !== zOpen).sort((a, b) => b.wins - a.wins || a.mid - b.mid)[0];
+  let verdict = 'stay';
+  if (best && best.wins === LAYERS.length) {
+    verdict = openT.every((v) => v > TURB_CONCERN) && best.turb.every((v) => v <= TURB_CONCERN) ? 'switch' : 'slight';
+  }
+  return { d, ms, rows, open, best, verdict, pick: verdict === 'stay' ? null : best.k };
+}
+function renderAdvisor() {
+  const S = T.sonde, bins = gateDepths(), feet = gateFeet(), start = parseDay(S.start), openFt = T.gate.openGateFt;
+  const all = range(0, S.params.turb.grid.length - 1).map((d) => advise(d, bins));
+  const days = all.filter(Boolean);
+  if (!days.length) return;
+  const sel = $('#ga-day'), prev = sel.value;
+  sel.innerHTML = days.map((s) => `<option value="${s.d}">${iso(s.ms)}</option>`).join('');
+  sel.value = prev !== '' && all[+prev] ? prev : String(days[days.length - 1].d);
+  const a = all[+sel.value], b = a.best, o = a.open;
+  const gateName = (k) => `<span style="color:${GATE_COLORS[k]}">G${k + 1}</span> at ${feet[k]} ft`;
+
+  let streak = 0;
+  for (let d = a.d; d >= 0; d--) {
+    if (!all[d]) continue;
+    if (all[d].verdict !== a.verdict || all[d].pick !== a.pick) break;
+    streak++;
+  }
+  const j = hist.index(a.ms), stor = j >= 0 && j < hist.n ? hist.series.strStor[j] : null, cap = T.constants.capacityAF.strStor;
+  $('#ga-context').innerHTML = `Strontia storage ${stor != null ? `${fmt(stor, 0)} af (${fmt(100 * stor / cap, 0)}% full)` : '—'}`;
+
+  const nL = LAYERS.length;
+  const headline = {
+    switch: `<span class="pill ok">switch</span> Open ${b && gateName(b.k)}. ${openFt} ft is above ${TURB_CONCERN} NTU and this gate is under it in all ${nL} layers (${fmt(o.mid, 2)} → ${fmt(b?.mid, 2)} NTU).`,
+    slight: `<span class="pill warn">small gain</span> ${b && gateName(b.k)} has lower turbidity than ${openFt} ft in all ${nL} layers (${fmt(o.mid, 2)} → ${fmt(b?.mid, 2)} NTU), but it doesn't change which side of ${TURB_CONCERN} NTU the water is on. Staying at ${openFt} ft is reasonable.`,
+    stay: `<span class="pill">stay</span> Keep ${openFt} ft (${fmt(o.mid, 2)} NTU). ${b ? `The best alternative, ${gateName(b.k)}, is lower in only ${b.wins} of ${nL} layers.` : 'No other gate to compare.'}`,
+  }[a.verdict];
+  $('#ga-headline').innerHTML = `${headline} Same suggestion for ${streak} sonde day${streak === 1 ? '' : 's'} in a row.`;
+
+  const tcell = (v) => (v > TURB_CONCERN ? `<span class="pill bad">${fmt(v, 2)}</span>` : fmt(v, 2));
+  $('#ga-table').innerHTML = `<table><tr><th>gate</th>${LAYER_M.map((m) => `<th>${m} m layer</th>`).join('')}<th>lower than ${openFt} ft</th></tr>
+    ${a.rows.map((r) => {
+      const isOpen = r.z === T.gate.openBin;
+      return `<tr${r.k === a.pick ? ' class="sel"' : ''}><td>${gateName(r.k)}${isOpen ? ' <span class="note">open</span>' : ''}</td>${r.turb.map((v) => `<td>${tcell(v)}</td>`).join('')}
+        <td>${isOpen ? '—' : `${r.wins} of ${nL}`}</td></tr>`;
+    }).join('')}</table>
+    <p class="note">Sonde turbidity (NTU) on ${iso(a.ms)}: daily median in a 1, 3 or 5 m layer centred on each gate. Red = above ${TURB_CONCERN} NTU.</p>`;
+
+  const W = 900, L = 44, R = 90, top = 4, H = 26, cw = (W - L - R) / all.length;
+  const svg = el('svg', { width: '100%', viewBox: `0 0 ${W} ${top + H + 20}` });
+  all.forEach((s, d) => {
+    if (!s) return;
+    const what = s.verdict === 'stay' ? `stay at ${openFt} ft` : `${s.verdict === 'switch' ? 'switch to' : 'small gain at'} G${s.pick + 1} ${feet[s.pick]} ft`;
+    const r = el('rect', {
+      x: L + d * cw, y: top, width: Math.max(1, cw - 0.6), height: H, fill: s.verdict === 'stay' ? '#3a4a5a' : GATE_COLORS[s.pick],
+      opacity: s.verdict === 'slight' ? 0.45 : 1, stroke: d === a.d ? '#fff' : null, 'stroke-width': 1.5, style: 'cursor:pointer',
+    }, svg);
+    r.appendChild(Object.assign(document.createElementNS(SVGNS, 'title'), { textContent: `${iso(s.ms)}: ${what} (${openFt} ft ${fmt(s.open.mid, 2)} NTU)` }));
+    r.addEventListener('click', () => { sel.value = String(d); renderAdvisor(); });
+  });
+  for (let d = 0; d < all.length; d++) {
+    const dt = new Date(start + d * DAY);
+    if (dt.getUTCDate() === 1) txt(svg, L + d * cw, top + H + 14, dt.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }));
+  }
+  const strip = $('#ga-strip');
+  strip.innerHTML = legend([['#3a4a5a', `stay at ${openFt} ft`], ...bins.map((z, k) => [GATE_COLORS[k], `G${k + 1} ${feet[k]} ft (faded = small gain)`]).filter((_, k) => bins[k] !== T.gate.openBin)]);
+  strip.appendChild(svg);
+  strip.insertAdjacentHTML('beforeend', `<p class="note">One cell per day; blank = no sonde reading. Click a day to see its table. Jake: gates change at most about once a day, and after a storm the water stays much the same for 3–4 days, so a suggestion that flickers shouldn't be acted on.</p>`);
+
+  $('#ga-method').innerHTML = [
+    `Only turbidity is used: the sonde's measured turbidity at each gate on the selected day. Jake: above ${TURB_CONCERN} NTU is a concern.`,
+    `Each gate is compared with ${openFt} ft in 1, 3 and 5 m layers centred on it, because nobody knows how thick a layer a gate draws. The best alternative is the gate lower than ${openFt} ft in the most layers, then the lowest 3 m value.`,
+    `<b>Switch</b> = ${openFt} ft is above ${TURB_CONCERN} NTU and the gate is under it, in every layer. <b>Small gain</b> = the gate is lower in every layer but on the same side of ${TURB_CONCERN} NTU. <b>Stay</b> = otherwise.`,
+    'The sonde is mid-reservoir and the gates are on the intake tower at the edge (Jake: "loose correlation"). Trust the ranking more than the numbers. The advisor suggests; operators and their decision makers decide.',
+    `The sonde file ends ${S.end}. With a live sonde feed the latest day would be today.`,
+  ].map((t) => `<li>${t}</li>`).join('');
+}
+
 // ---------- years ----------
 function renderYears() {
   const key = $('#yr-var').value || 'swe';
@@ -1087,6 +1182,7 @@ async function init() {
   $('#dp-param').addEventListener('change', renderDepth);
   document.querySelectorAll('input.gate').forEach((g) => g.addEventListener('change', renderDepth));
   $('#wf-gate').addEventListener('change', renderWhatIf);
+  $('#ga-day').addEventListener('change', renderAdvisor);
   renderEvents();
   const hashDay = /^#\d{4}-\d{2}-\d{2}$/.test(location.hash) ? hist.index(parseDay(location.hash.slice(1))) : null;
   state.i = hashDay != null && hashDay >= 0 && hashDay < hist.n ? hashDay : hist.index(parseDay('2023-08-01'));

@@ -43,7 +43,7 @@ Link to a day in Replay with a hash, e.g. http://localhost:8766/#2023-08-01.
 | **Replay** | What did past events do as they moved through the system? Scrub or play any day, see detected events, what a model would have projected, and past days like this one. |
 | **Live** | What does the system look like right now? Latest provisional readings and the NWS outlook at Strontia. |
 | **Forecast** | Given today's upstream conditions and this morning's plant reading, what's coming in the next 7 days? The +4 day action window is highlighted. |
-| **Reservoir depth** | What does the Strontia water column look like by depth, and how would plant TOC and alkalinity change if Foothills drew from a gate other than 45 ft? |
+| **Reservoir depth** | Which gate would give Foothills the easiest water to treat on a given day (gate advisor)? What does the Strontia water column look like by depth, and how would plant TOC and alkalinity change if Foothills drew from a gate other than 45 ft? |
 | **Years** | How do wet and dry years differ? Each water year overlaid, labelled by snowpack. |
 | **Lags & skill** | How many days does the river lead the plant, and how much better is each model than repeating the last plant reading? |
 
@@ -87,6 +87,11 @@ They aren't a replacement for Jake's random forests.
   TOC uses turbidity (0.019 mg/L per NTU). The shaded ranges come from a 7-day block
   bootstrap. Result for April to August 2026: no gate changes TOC meaningfully, and
   deeper gates carry slightly more alkalinity.
+- **Gate advisor.** Turbidity only. For each sonde day, compares every gate's measured
+  turbidity with the open 45 ft gate in 1, 3 and 5 m layers centred on the gate. It says
+  **switch** if 45 ft is above 10 NTU (Jake) and another gate is under it in every
+  layer, **small gain** if another gate is lower in every layer but on the same side of
+  10 NTU, else **stay**. A day-by-day strip shows how long a suggestion held.
 
 ## Rules that are ours, not Denver Water's
 
@@ -97,6 +102,7 @@ They aren't a replacement for Jake's random forests.
 - **Seasons in the lag analysis:** melt (Apr–Jun), monsoon (Jul–Sep), fall (Oct–Dec).
 - **Gate depths:** 15, 45, 65 and 95 ft, read as feet below the water surface, with only
   45 ft open (team, 2026-09-25).
+- **Gate advisor:** the all-layers rule and the switch / small gain / stay tiers.
 - **Specific conductance from the sonde:** raw conductivity / (1 + 0.0191 × (T − 25)),
   the standard compensation (general knowledge). The raw sonde column is uncompensated.
 
@@ -109,7 +115,9 @@ They aren't a replacement for Jake's random forests.
 - **Reservoir releases, which gate is actually drawing, and water from other sources
   aren't inputs.**
 - **The sonde record covers 2026-04-07 to 08-19 only**, one dry spring and summer.
-- **Nothing here recommends a dosing or gate decision.**
+- **The gate advisor suggests; it doesn't decide.** The sonde is mid-reservoir, not at
+  the intake tower, and only the 45 ft gate has plant outcomes behind it. Nothing here
+  recommends a dosing decision.
 
 ## Open questions for Denver Water
 
