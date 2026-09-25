@@ -12,6 +12,7 @@ client only chooses the day count. Everything returned is provisional.
 
 import http.client
 import json
+import os
 import sys
 import threading
 import time
@@ -23,7 +24,7 @@ from datetime import date, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8766
+PORT = 8766
 ROOT = Path(__file__).resolve().parent
 USER_AGENT = "design-storm-2026-cendit prototype (Explore DDD 2026 Design Storm)"
 CACHE_SECONDS = 900
@@ -206,10 +207,21 @@ class Handler(SimpleHTTPRequestHandler):
         self.wfile.write(hit[1])
 
 
-if __name__ == "__main__":
-    with ThreadingHTTPServer(("127.0.0.1", PORT), Handler) as httpd:
-        print(f"cendit prototype at http://localhost:{PORT}/  (live data via /api/live)")
+class Server(ThreadingHTTPServer):
+    # On Windows SO_REUSEADDR lets a second copy bind the same port silently; fail loudly instead.
+    allow_reuse_address = os.name != "nt"
+
+
+def serve(port=PORT, on_ready=None):
+    with Server(("127.0.0.1", port), Handler) as httpd:
+        print(f"cendit prototype at http://localhost:{port}/  (live data via /api/live, Ctrl+C to stop)")
+        if on_ready:
+            on_ready(port)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
             pass
+
+
+if __name__ == "__main__":
+    serve(int(sys.argv[1]) if len(sys.argv) > 1 else PORT)
