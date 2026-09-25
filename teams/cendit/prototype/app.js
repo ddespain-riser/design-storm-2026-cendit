@@ -742,6 +742,17 @@ function sondeAt(grid, d, depth) {
   for (const off of [0, -1, 1]) if (row[depth + off] != null) return row[depth + off];
   return null;
 }
+// Q23: nobody knows what band of depths an open gate draws. So the band is a control, not a
+// constant. 1 m reads a single bin; 3 m and 5 m average the bins either side of the gate.
+function windowM() { const s = $('#dp-window'); return s ? +s.value : 3; }
+function halfFor(m) { return Math.floor((m - 1) / 2); }
+function sondeWindow(grid, d, depth, half) {
+  const row = grid[d];
+  if (!row) return null;
+  const vals = [];
+  for (let z = depth - half; z <= depth + half; z++) if (z >= 0 && z < row.length && row[z] != null) vals.push(row[z]);
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : sondeAt(grid, d, depth);
+}
 function sondeDay(ms) { return Math.round((ms - parseDay(T.sonde.start)) / DAY); }
 function topBottom(d) {
   const row = T.sonde.params.temp.grid[d];
@@ -755,6 +766,282 @@ function sondeLine(ms) {
   const tb = topBottom(sondeDay(ms));
   return tb ? `sonde: ${fmt(tb.top)} °C top, ${fmt(tb.bottom)} °C bottom` : '';
 }
+// ---------- gate recommendation ----------
+// Deliberately not a per-gate absolute plant number (decision 0003, B1): the sonde is
+// mid-reservoir and we cannot defend "G3 would have measured 2.4 mg/L". What we can defend is an
+// ordering of measured sonde turbidity at each gate's depth, and how far apart the gates are
+// against the day-to-day noise. Turbidity because it is the one threshold an SME gave us:
+// above 10 NTU is a concern (Coleman, 2026-09-25).
+const REC_PARAM = 'turb';
+// Above 10 NTU is a concern (Jake / Coleman, 2026-09-25). Shared by both decision views, which
+// arrived at it independently.
+const TURB_CONCERN = 10;
+const med = (arr) => { const s = arr.filter((v) => v != null).sort((a, b) => a - b); return s.length ? quantile(s, 0.5) : null; };
+const qOf = (arr, q) => { const s = arr.filter((v) => v != null).sort((a, b) => a - b); return s.length ? quantile(s, q) : null; };
+
+function castDays() {
+  const grid = T.sonde.params[REC_PARAM].grid;
+  return [...grid.keys()].filter((d) => grid[d].some((v) => v != null));
+}
+function periodDays() {
+  const all = castDays(), sel = $('#dp-period'), p = sel ? +sel.value : 30;
+  if (!p || !all.length) return all;
+  const last = all[all.length - 1];
+  return all.filter((d) => d > last - p);
+}
+function gateSeries(half, days) {
+  const grid = T.sonde.params[REC_PARAM].grid;
+  return gateDepths().map((z) => days.map((d) => sondeWindow(grid, d, z, half)));
+}
+// Day-to-day noise: the median absolute change between consecutive cast days, pooled over gates.
+// Two gates closer together than this are not distinguishable by this record.
+function dayNoise(series) {
+  const deltas = [];
+  for (const s of series) for (let i = 1; i < s.length; i++) if (s[i] != null && s[i - 1] != null) deltas.push(Math.abs(s[i] - s[i - 1]));
+  return med(deltas) ?? 0;
+}
+// Greedy tiering: walk the gates cleanest-first and start a new tier whenever the next gate is
+// more than one noise unit worse than the tier's leader. Gates inside a tier are called tied.
+function ranking(half, days) {
+  const series = gateSeries(half, days);
+  const noise = dayNoise(series);
+  const feet = gateFeet();
+  const stats = series.map((s, k) => ({
+    k, ft: feet[k], med: med(s), p10: qOf(s, 0.1), p90: qOf(s, 0.9), n: s.filter((v) => v != null).length,
+  }));
+  const ord = stats.filter((s) => s.med != null).sort((a, b) => a.med - b.med);
+  const tiers = [];
+  for (const s of ord) {
+    const t = tiers[tiers.length - 1];
+    if (t && s.med - t[0].med < noise) t.push(s); else tiers.push([s]);
+  }
+  return { series, stats, ord, tiers, noise, days };
+}
+// Two different things can change when the withdrawal band changes: the sequence the gates fall
+// in, and where the tie boundaries land. Only the first is an inversion.
+const orderKey = (r) => r.ord.map((s) => s.k).join(',');
+const tierKey = (r) => r.tiers.map((t) => t.map((s) => s.k).sort().join('+')).join(' > ');
+
+// A recommendation on turbidity alone would happily point at the surface, where the water is
+// clearest and also warmest and most biologically active. So rank the leader on the sonde's other
+// parameters too and show where it does badly. Not a veto — something to argue with.
+function crossCheck(half, days, leaderK) {
+  const gates = gateDepths();
+  return ['temp', 'chl', 'phyco', 'odo'].filter((p) => T.sonde.params[p]).map((p) => {
+    const P = T.sonde.params[p], grid = P.grid;
+    const meds = gates.map((z) => med(days.map((d) => sondeWindow(grid, d, z, half))));
+    if (meds.some((v) => v == null)) return null;
+    const ord = [...meds.keys()].sort((a, b) => (P.better === 'high' ? meds[b] - meds[a] : meds[a] - meds[b]));
+    return { key: p, label: P.label, unit: P.unit, better: P.better, value: meds[leaderK], rank: ord.indexOf(leaderK) + 1 };
+  }).filter(Boolean);
+}
+
+// The contiguous band of depths whose median turbidity is within one noise unit of the column's
+// cleanest bin. This is the claim B1 asks for: where the clean layer is, not what a gate delivers.
+function cleanLayer(days) {
+  const grid = T.sonde.params[REC_PARAM].grid, nz = T.sonde.depths.length;
+  const prof = range(0, nz - 1).map((z) => med(days.map((d) => (grid[d] ? grid[d][z] : null))));
+  const noise = dayNoise([prof]);
+  let best = null;
+  prof.forEach((v, z) => { if (v != null && (best == null || v < prof[best])) best = z; });
+  if (best == null) return null;
+  const cut = prof[best] + Math.max(noise, 0.05);
+  let a = best, b = best;
+  while (a > 0 && prof[a - 1] != null && prof[a - 1] <= cut) a--;
+  while (b < nz - 1 && prof[b + 1] != null && prof[b + 1] <= cut) b++;
+  return { prof, top: a, bottom: b, best, value: prof[best] };
+}
+
+function renderRecommend() {
+  const S = T.sonde, wm = windowM(), half = halfFor(wm), days = periodDays();
+  const start = parseDay(S.start), feet = gateFeet();
+  const periodLabel = ($('#dp-period') && +$('#dp-period').value)
+    ? `the ${$('#dp-period').value} days to ${iso(start + days[days.length - 1] * DAY)}` : `the whole record (${S.start} to ${S.end})`;
+  $('#rec-intro').innerHTML = `Gates ranked by <b>measured</b> turbidity at each gate's depth in the mid-reservoir sonde, over ${periodLabel}
+    (${days.length} cast days), averaging the column over <b>${wm} m</b> around each gate. This is an <b>ordering with a margin</b>, not a
+    prediction of what the plant would measure — the sonde is not at the intake tower (Q24).`;
+
+  const R = ranking(half, days);
+  if (!R.ord.length) { $('#rec-headline').innerHTML = '<p class="note">No sonde readings in this period.</p>'; return; }
+
+  // --- headline: the ordering, and whether the lead is real
+  const lead = R.tiers[0], next = R.tiers[1];
+  const join = (parts) => (parts.length < 2 ? parts[0] || '' : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1]);
+  const names = (t) => join(t.map((s) => `<b style="color:${GATE_COLORS[s.k]}">G${s.k + 1}</b> at ${s.ft} ft`));
+  const nextName = next ? (next.length > 1 ? `the next group (${names(next)})` : names(next)) : '';
+  const sep = next ? next[0].med - lead[0].med : null;
+  const bands = [0, 1, 2].map((h) => ranking(h, days));
+  const agree = { order: bands.map(orderKey), tiers: bands.map(tierKey) };
+  const holds = agree.order.every((k) => k === agree.order[0]);
+  const tiesHold = agree.tiers.every((k) => k === agree.tiers[0]);
+  const verdict = lead.length > 1
+    ? `${names(lead)} are <b>tied</b> for cleanest — closer together than the ${fmt(R.noise, 2)} NTU the column swings from one cast to the next. Either is defensible; nothing here separates them.`
+    : next
+      ? `${names(lead)} is the cleanest gate, ahead of ${nextName} by <b>${fmt(sep, 2)} NTU</b> — ${fmt(sep / R.noise, 1)}× the day-to-day noise, so the lead is real.`
+      : `${names(lead)} is the only gate with readings in this period.`;
+  const cls = lead.length > 1 ? 'neutral' : (sep / R.noise >= 2 ? 'good' : 'neutral');
+  const xc = crossCheck(half, days, lead[0].k);
+  const worst = xc.filter((c) => c.rank >= 3);
+  $('#rec-headline').innerHTML = `<p class="headline ${cls}">${verdict}</p>
+    <p class="note">Order: ${R.tiers.map((t) => t.map((s) => `G${s.k + 1}`).join(' = ')).join(' &gt; ')} (cleanest first).
+    ${holds ? `The gates fall in the same sequence whether a gate draws over 1, 3 or 5 m${tiesHold ? '.' : ', though which pairs count as tied does shift.'}`
+      : 'The sequence <b>changes</b> with the assumed withdrawal band — see the panel on the right.'}
+    ${lead[0].med > TURB_CONCERN ? `Even the cleanest gate sits above the ${TURB_CONCERN} NTU concern line for this period.` : ''}</p>
+    ${xc.length ? `<p class="note"><b>Cross-check on G${lead[0].k + 1}</b>, because turbidity alone will always favour the surface:
+      ${xc.map((c) => `${c.label.toLowerCase().replace(' (computed, 25 °c)', '')} ${fmt(c.value, 2)}${c.unit ? ' ' + c.unit : ''} (${['best', '2nd', '3rd', 'worst'][c.rank - 1]} of 4${c.better ? '' : ', no better direction assumed'})`).join(' · ')}.
+      ${worst.length ? `<b>It is in the bottom half on ${worst.map((c) => c.label.toLowerCase()).join(' and ')}.</b> The ranking above is a turbidity ranking; that is the trade an operator should be handed, not hidden.`
+        : 'Nothing here argues against it.'}</p>` : ''}`;
+
+  // --- ranking chart: median with a 10-90 whisker, the tie margin drawn as a band
+  // Scale to the data, not to the concern line: in a dry summer every gate sits well under 10 NTU,
+  // and stretching the axis out to it would flatten the differences the ranking is about.
+  const dataHi = Math.max(...R.stats.filter((s) => s.p90 != null).map((s) => s.p90));
+  const showConcern = TURB_CONCERN <= dataHi * 1.3;
+  const hiV = (showConcern ? Math.max(dataHi, TURB_CONCERN) : dataHi) * 1.35;
+  const W = 900, H = 46 + R.stats.length * 46, LM = 96, RM = 16;
+  const svg = el('svg', { width: '100%', viewBox: `0 0 ${W} ${H}` });
+  const x = (v) => LM + (v / hiV) * (W - LM - RM);
+  if (showConcern) {
+    el('rect', { x: x(TURB_CONCERN), y: 6, width: Math.max(0, W - RM - x(TURB_CONCERN)), height: H - 36, fill: 'var(--bad)', opacity: 0.1 }, svg);
+    txt(svg, x(TURB_CONCERN) + 4, 18, `${TURB_CONCERN} NTU: a concern`, { fill: 'var(--bad)' });
+  } else {
+    txt(svg, LM, 18, `every gate is well under the ${TURB_CONCERN} NTU concern line — the worst 90th percentile here is ${fmt(dataHi, 2)} NTU, so this is a choice between clean options`, { fill: 'var(--ok)' });
+  }
+  el('rect', { x: x(lead[0].med), y: 6, width: Math.max(1, x(lead[0].med + R.noise) - x(lead[0].med)), height: H - 30, fill: '#fff', opacity: 0.1 }, svg);
+  R.ord.forEach((s, i) => {
+    const y = 34 + i * 46;
+    txt(svg, LM - 8, y + 5, `G${s.k + 1} · ${s.ft} ft`, { 'text-anchor': 'end', fill: GATE_COLORS[s.k] });
+    el('line', { x1: x(s.p10), x2: x(s.p90), y1: y, y2: y, stroke: GATE_COLORS[s.k], 'stroke-width': 2, opacity: 0.35 }, svg);
+    el('rect', { x: LM, y: y - 9, width: Math.max(2, x(s.med) - LM), height: 18, fill: GATE_COLORS[s.k], opacity: 0.55 }, svg);
+    el('circle', { cx: x(s.med), cy: y, r: 4, fill: GATE_COLORS[s.k] }, svg);
+    const tie = R.tiers.find((t) => t.includes(s));
+    txt(svg, x(s.p90) + 8, y + 5, `${fmt(s.med, 2)} NTU${tie.length > 1 ? ' · tied' : ''}`, { fill: '#c9d4de' });
+  });
+  txt(svg, LM, H - 6, `bar = median · line = 10th to 90th percentile · shaded strip = ±${fmt(R.noise, 2)} NTU, one cast-to-cast swing`, { fill: '#8b97a3' });
+  $('#rec-rank').innerHTML = '';
+  $('#rec-rank').appendChild(svg);
+
+  renderRecHistory(half);
+  renderRecSensitivity(days, agree);
+  renderRecLayer(days, R);
+  $('#rec-caveats').innerHTML = [
+    'The ranking uses <b>measured</b> sonde turbidity at depth. No model, no counterfactual plant value.',
+    `The sonde sits mid-reservoir, not on the intake tower, so this is what the <i>column</i> holds at each gate's depth, not what the tower would deliver (Q24, open).`,
+    `Only the ${T.gate ? T.gate.openGateFt : 45} ft gate has ever been open, so nothing here has been checked against a real gate change.`,
+    `Turbidity above ${TURB_CONCERN} NTU is Denver Water's concern line. TOC is not shown because the sonde cannot measure it.`,
+    `One sonde, one spring and summer (${S.start} to ${S.end}), one dry year.`,
+    `<b>There is a second answer to this question.</b> Switch <i>decision view</i> to "Gate advisor" for a single day's switch / small gain / stay call, which is the stricter rule: a gate has to beat 45 ft in all three layers. Same data and the same ${TURB_CONCERN} NTU line; a different unit of answer.`,
+  ].map((t) => `<li>${t}</li>`).join('');
+}
+
+// B6: history is the product. Rank every gate on every cast day in the record so an operator can
+// see whether the answer has held or flickers. A recommendation that changes every cast is one
+// they will correctly ignore.
+function renderRecHistory(half) {
+  const S = T.sonde, all = castDays(), start = parseDay(S.start), grid = S.params[REC_PARAM].grid;
+  const gates = gateDepths(), feet = gateFeet();
+  const rows = all.map((d) => {
+    const v = gates.map((z) => sondeWindow(grid, d, z, half));
+    if (v.some((u) => u == null)) return null;
+    const order = [...v.keys()].sort((a, b) => v[a] - v[b]);
+    const rank = [];
+    order.forEach((k, i) => { rank[k] = i; });
+    return { d, v, rank };
+  });
+  const scored = rows.filter(Boolean);
+  if (!scored.length) { $('#rec-history').innerHTML = '<p class="note">No day has a reading at all four gates.</p>'; return; }
+  const W = 900, LM = 96, RM = 190, top = 16, rh = 26, B = 40, H = top + 4 * rh + B;
+  const svg = el('svg', { width: '100%', viewBox: `0 0 ${W} ${H}` });
+  const cw = (W - LM - RM) / all.length;
+  all.forEach((d, i) => {
+    const row = rows[i];
+    for (let k = 0; k < 4; k++) {
+      const y = top + k * rh;
+      if (!row) { el('rect', { x: LM + i * cw, y, width: cw + 0.4, height: rh - 3, fill: '#2a2f36' }, svg); continue; }
+      const r = row.rank[k];
+      el('rect', { x: LM + i * cw, y, width: cw + 0.4, height: rh - 3, fill: GATE_COLORS[k], opacity: [0.95, 0.5, 0.25, 0.1][r] }, svg)
+        .appendChild(Object.assign(document.createElementNS(SVGNS, 'title'),
+          { textContent: `${iso(start + d * DAY)} · G${k + 1} at ${feet[k]} ft · rank ${r + 1} of 4 · ${fmt(row.v[k], 2)} NTU` }));
+    }
+  });
+  for (let k = 0; k < 4; k++) {
+    const wins = scored.filter((r) => r.rank[k] === 0).length, topTwo = scored.filter((r) => r.rank[k] <= 1).length;
+    txt(svg, LM - 8, top + k * rh + 16, `G${k + 1} · ${feet[k]} ft`, { 'text-anchor': 'end', fill: GATE_COLORS[k] });
+    txt(svg, W - RM + 10, top + k * rh + 16, `cleanest ${wins}/${scored.length} · top two ${topTwo}`, { fill: '#c9d4de' });
+  }
+  all.forEach((d, i) => {
+    const dt = new Date(start + d * DAY);
+    if (dt.getUTCDate() <= 7 && (i === 0 || new Date(start + all[i - 1] * DAY).getUTCMonth() !== dt.getUTCMonth()))
+      txt(svg, LM + i * cw, top + 4 * rh + 14, dt.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }), { fill: '#8b97a3' });
+  });
+  // How often the leader changes from one cast to the next — the flicker rate.
+  let flips = 0;
+  for (let i = 1; i < scored.length; i++) if (scored[i].rank.indexOf(0) !== scored[i - 1].rank.indexOf(0)) flips++;
+  const spans = [];
+  scored.forEach((r) => { const w = r.rank.indexOf(0); const s = spans[spans.length - 1]; if (s && s.k === w) s.n++; else spans.push({ k: w, n: 1 }); });
+  const longest = spans.reduce((a, b) => (b.n > a.n ? b : a));
+  txt(svg, LM, H - 6, `each column is one cast day · darkest = cleanest that day · grey = not all four gates read`, { fill: '#8b97a3' });
+  $('#rec-history').innerHTML = '';
+  $('#rec-history').appendChild(svg);
+  $('#rec-history').insertAdjacentHTML('beforeend',
+    `<p class="note">Across ${scored.length} cast days with all four gates read, the cleanest gate changed <b>${flips} times</b>
+     (${fmt(100 * flips / Math.max(1, scored.length - 1), 0)}% of cast-to-cast steps). The longest unbroken run belongs to
+     <b style="color:${GATE_COLORS[longest.k]}">G${longest.k + 1}</b> at ${longest.n} consecutive casts.
+     ${flips / Math.max(1, scored.length - 1) > 0.4 ? 'That is a flickering answer: it should be read at a weekly cadence, not per cast.'
+      : 'A stable answer at this cadence, which is what makes it handable upward.'}</p>`);
+}
+
+// B2: Jake asked us what band of depths a gate draws. We cannot answer the physics, but we can
+// answer whether it matters — recompute the order at 1, 3 and 5 m and say whether it survives.
+function renderRecSensitivity(days, agree) {
+  const box = $('#rec-sensitivity');
+  const holds = agree.order.every((k) => k === agree.order[0]);
+  const tiesHold = agree.tiers.every((k) => k === agree.tiers[0]);
+  const rowsHtml = [1, 3, 5].map((m) => {
+    const R = ranking(halfFor(m), days);
+    return `<tr><td>${m} m</td><td class="l">${R.tiers.map((t) => t.map((s) => `<span style="color:${GATE_COLORS[s.k]}">G${s.k + 1}</span>`).join(' = ')).join(' &gt; ')}</td>
+      <td>${fmt(R.noise, 2)}</td></tr>`;
+  }).join('');
+  const verdict = !holds
+    ? ['warn', 'The sequence <b>inverts</b> across the three bands. Q23 is not harmless here: we need the withdrawal rate and tower geometry from an engineer before this ranking can be recommended.']
+    : tiesHold
+      ? ['good', 'Identical at all three. The uncertainty in Q23 is harmless for this decision — the recommendation stands without knowing the withdrawal band.']
+      : ['good', 'The gates fall in the <b>same sequence</b> at all three bands; only the tie boundaries move, which is a statement about how close two gates are, not about which is cleaner. The recommendation survives Q23.'];
+  box.innerHTML = `<p class="note">Nobody knows what band of depths an open gate actually draws (Q23, Jake asked us). So we recompute the
+    order with the sonde averaged over 1, 3 and 5 m around each gate. "=" means tied — closer together than one cast-to-cast swing.</p>
+    <table><tr><th>draws over</th><th>order, cleanest first</th><th>noise</th></tr>${rowsHtml}</table>
+    <p class="headline ${verdict[0]}">${verdict[1]}</p>
+    <p class="note">Either answer is worth sending back to Jake. If it holds, say so plainly; if it inverts, that is a specific ask, which beats a guess.</p>`;
+}
+
+function renderRecLayer(days, R) {
+  const box = $('#rec-layer'), L = cleanLayer(days);
+  if (!L) { box.innerHTML = '<p class="note">Not enough readings in this period.</p>'; return; }
+  const toFt = (z) => (z + 0.5) * M_TO_FT;
+  box.innerHTML = `<p class="headline good">The column is stratified, and the clean layer sits between
+    <b>${fmt(toFt(L.top), 0)}</b> and <b>${fmt(toFt(L.bottom), 0)} ft</b> below the surface, bottoming out at
+    ${fmt(toFt(L.best), 0)} ft with ${fmt(L.value, 2)} NTU.</p>`;
+  const prof = L.prof.map((v, z) => [v, toFt(z)]).filter((p) => p[0] != null);
+  if (prof.length > 1) {
+    const maxV = Math.max(...prof.map((p) => p[0]));
+    const showConcern = TURB_CONCERN <= maxV * 1.3;
+    const xHi = (showConcern ? Math.max(maxV, TURB_CONCERN) : maxV) * 1.15;
+    box.appendChild(xyChart({
+      width: 360, height: 220, xDomain: [0, xHi], yDomain: [prof[prof.length - 1][1], 0],
+      xFmt: (v) => fmt(v, 1), yFmt: (v) => fmt(v, 0) + ' ft', yTicks: [0, 40, 80, 120, 160].filter((v) => v <= prof[prof.length - 1][1]),
+      vbands: showConcern ? [{ x0: TURB_CONCERN, x1: xHi, color: 'var(--bad)', label: `${TURB_CONCERN} NTU` }] : [],
+      hlines: gateFeet().map((f, k) => ({ y: f, color: GATE_COLORS[k], label: `G${k + 1}` })),
+      series: [{ points: prof, color: '#8ecae6', width: 2 }], xLabel: 'median turbidity (NTU)',
+    }));
+  }
+  const inLayer = gateFeet().map((f, k) => ({ f, k })).filter(({ f }) => f >= toFt(L.top) - 2 && f <= toFt(L.bottom) + 2);
+  box.insertAdjacentHTML('beforeend', `<p class="note">Median turbidity per 1 m bin over this period, with the four gates drawn across it.
+    "Clean layer" = the contiguous depths within one cast-to-cast swing (${fmt(R.noise, 2)} NTU) of the cleanest bin.
+    ${inLayer.length
+      ? `${inLayer.map(({ k, f }) => `<b style="color:${GATE_COLORS[k]}">G${k + 1}</b> (${f} ft)`).join(' and ')} sits inside it, so it draws the clean layer whatever the exact withdrawal geometry.`
+      : `<b>No gate sits inside it.</b> The cleanest water in the column is not reachable through any of these four gates, so the ranking is a choice between gates, not a route to the best water available — worth saying out loud to Denver Water.`}</p>`);
+}
+
 function renderDepth() {
   const S = T.sonde, key = $('#dp-param').value || 'turb', P = S.params[key];
   const nDays = P.grid.length, nDepth = S.depths.length, start = parseDay(S.start);
@@ -763,7 +1050,7 @@ function renderDepth() {
   const all = P.grid.flat().filter((v) => v != null).map(tr).sort((a, b) => a - b);
   const lo = quantile(all, 0.02), hi = quantile(all, 0.98);
   const unit = P.unit ? ` (${P.unit})` : '';
-  $('#dp-note').innerHTML = `${P.label}${unit}${P.log ? ', log colour scale' : ''}: daily median per 1 m (3.3 ft) depth bin, from ${S.nReadings.toLocaleString()} readings on ${S.daysWithData} days (${S.start} to ${S.end}).
+  $('#dp-note').innerHTML = `${P.label}${unit}${P.log ? ', log colour scale' : ''}: daily median per 1 m (3.3 ft) depth bin, from the <b>mid-reservoir</b> sonde — ${S.nReadings.toLocaleString()} readings on ${S.daysWithData} days (${S.start} to ${S.end}).
     Grey = no reading. Dashed lines are the four gates. The bars on top are the daily maximum river turbidity at the gage above Strontia, for the same days.`;
 
   const W = 900, L = 44, R = 90, top = 46, H = 300, B = 44;
@@ -813,8 +1100,9 @@ function renderDepth() {
   $('#dp-heat').innerHTML = '';
   $('#dp-heat').appendChild(svg);
 
-  // per-gate series
-  const perGate = gates.map((g) => range(0, nDays - 1).map((d) => sondeAt(P.grid, d, g)));
+  // per-gate series, averaged over the assumed withdrawal band (Q23)
+  const half = halfFor(windowM());
+  const perGate = gates.map((g) => range(0, nDays - 1).map((d) => sondeWindow(P.grid, d, g, half)));
   const vals = perGate.flat().filter((v) => v != null);
   const monthTicks = range(0, nDays - 1).filter((d) => new Date(start + d * DAY).getUTCDate() === 1);
   const box = $('#dp-gates');
@@ -828,8 +1116,7 @@ function renderDepth() {
   }
 
   // best gate
-  const med = (arr) => { const s = arr.filter((v) => v != null).sort((a, b) => a - b); return s.length ? quantile(s, 0.5) : null; };
-  const p90 = (arr) => { const s = arr.filter((v) => v != null).sort((a, b) => a - b); return s.length ? quantile(s, 0.9) : null; };
+  const p90 = (arr) => qOf(arr, 0.9);
   let wins = [0, 0, 0, 0], compared = 0;
   if (P.better) {
     for (let d = 0; d < nDays; d++) {
@@ -843,7 +1130,8 @@ function renderDepth() {
     ${gates.map((g, k) => `<tr><td><span style="color:${GATE_COLORS[k]}">G${k + 1}</span> ${feet[k]} ft</td><td>${fmt(med(perGate[k]), 2)}</td><td>${fmt(p90(perGate[k]), 2)}</td>${P.better ? `<td>${wins[k]} d</td>` : ''}</tr>`).join('')}</table>
     <p class="note">${P.better ? `Best = ${P.better === 'low' ? 'lowest' : 'highest'} ${P.label.toLowerCase()} on each of the ${compared} days where all four gates have a reading.`
       : `No better-or-worse direction is assumed for ${P.label.toLowerCase()}. Pick turbidity, oxygen, chlorophyll or phycocyanin to see a "best gate".`}
-    This is the "look at water quality by level" view Jake asked for. The gate advisor above turns turbidity into a daily gate suggestion.</p>`;
+    This is the "look at water quality by level" view Jake asked for, for whichever parameter is selected above. The decision view at
+    the top of this tab turns turbidity into a gate answer — a daily suggestion or a standing ranking, depending which you pick.</p>`;
 
   // stratification
   const diff = range(0, nDays - 1).map((d) => { const tb = topBottom(d); return tb ? tb.top - tb.bottom : null; });
@@ -856,20 +1144,34 @@ function renderDepth() {
     series: [{ points: diff.map((v, d) => [d, v]), color: '#ff6b9a' }], yLabel: '°C',
   }));
   if (last != null) sb.insertAdjacentHTML('beforeend', `<p class="note">Last reading ${iso(start + last * DAY)}: ${fmt(diff[last])} °C top-to-bottom. Compare with near zero for a mixed column; data after ${S.end} would be needed to see turnover (Q18).</p>`);
+  renderDecisionView();
   renderWhatIf();
-  renderAdvisor();
+}
+
+// Two independent answers to "which gate", built against decision 0003 by different people. They
+// agree on the core — turbidity only, 10 NTU, 1/3/5 m layers — and differ in what they hand an
+// operator: one day's suggestion, or a standing ranking with a margin. Which is the right unit of
+// answer is still an open team question, so both ship and the selector switches between them.
+function decisionView() { const s = $('#dp-view'); return s ? s.value : 'advisor'; }
+function renderDecisionView() {
+  const mode = decisionView();
+  $('#ga-view').classList.toggle('hidden', mode !== 'advisor');
+  $('#rec-view').classList.toggle('hidden', mode !== 'ranking');
+  // The period only means something to the ranking; the advisor answers for a single day.
+  $('#dp-period-label').classList.toggle('hidden', mode !== 'ranking');
+  if (mode === 'advisor') renderAdvisor(); else renderRecommend();
 }
 
 // ---------- gate what-if ----------
 function whatIf(target, zGate) {
   const G = T.gate, M = G.targets[target], S = T.sonde, start = parseDay(S.start);
-  const n = S.params.sc.grid.length, zOpen = G.openBin;
+  const n = S.params.sc.grid.length, zOpen = G.openBin, half = halfFor(windowM());
   const rows = [];
   for (let k = 0; k < n; k++) {
     const ms = start + (k + M.lag) * DAY, j = hist.index(ms);
     const actual = j >= 0 && j < hist.n ? hist.series[target][j] : null;
     const deltas = M.features.map((f) => {
-      const a = sondeAt(S.params[f].grid, k, zGate), b = sondeAt(S.params[f].grid, k, zOpen);
+      const a = sondeWindow(S.params[f].grid, k, zGate, half), b = sondeWindow(S.params[f].grid, k, zOpen, half);
       return a != null && b != null ? a - b : null;
     });
     if (actual == null || deltas.some((d) => d == null)) { rows.push({ ms, actual, v: null }); continue; }
@@ -891,7 +1193,12 @@ function renderWhatIf() {
   sel.value = prev !== '' && bins[+prev] !== G.openBin && sel.querySelector(`option[value="${prev}"]`) ? prev : String(Math.max(0, firstOther));
   const k = +sel.value, zGate = bins[k];
   const ta = G.targets.alk, tt = G.targets.toc;
-  $('#wf-intro').innerHTML = `Everything Foothills measured came through the <b>${openFt} ft gate</b>. The dark line is what the plant actually measured. The coloured line estimates what it would have measured drawing from <b>G${k + 1} at ${feet[k]} ft</b> instead. Shading is a rough 80% range from resampling the fit.`;
+  $('#wf-intro').innerHTML = `<b>Read the decision view at the top of this tab first — ${decisionView() === 'advisor' ? 'the gate advisor' : 'the gate ranking'}.
+    This panel supports it and does not stand on its own.</b>
+    Everything Foothills measured came through the <b>${openFt} ft gate</b>, so the dark line is measured. The coloured line is a
+    <b>model</b> of the gate-to-gate <i>difference</i> applied to that measurement, using a mid-reservoir sonde that may not represent
+    what the intake tower draws (Q24). Read the shape and the direction of the shift; <b>do not quote a value off it as what
+    G${k + 1} would deliver</b> — that is the claim we retracted in decision 0003. Shading is a rough 80% range from resampling the fit.`;
 
   const box = $('#wf-charts');
   box.innerHTML = '';
@@ -910,8 +1217,8 @@ function renderWhatIf() {
       runs[runs.length - 1].push([xs(r), r.lo, r.hi]);
     }
     const div = document.createElement('div');
-    div.innerHTML = `<b>${target === 'toc' ? 'TOC' : 'Alkalinity'} at Foothills (mg/L)</b>` +
-      legend([['#dbe5ee', `measured (${openFt} ft gate)`, false, 'wf:measured'], [GATE_COLORS[k], `what-if: G${k + 1} ${feet[k]} ft`, false, 'wf:whatif'], ['var(--warn)', 'what-if outside the fitted range', false, 'wf:extrap']]);
+    div.innerHTML = `<b>${target === 'toc' ? 'TOC' : 'Alkalinity'} at Foothills (mg/L)</b> <span class="note">— measured, and the modelled shift</span>` +
+      legend([['#dbe5ee', `measured (${openFt} ft gate)`, false, 'wf:measured'], [GATE_COLORS[k], `modelled shift: G${k + 1} ${feet[k]} ft`, false, 'wf:whatif'], ['var(--warn)', 'what-if outside the fitted range', false, 'wf:extrap']]);
     div.appendChild(xyChart({
       width: 900, height: 220, xDomain: [0, nDays + 1], yDomain: [lo - pad, hi + pad], xTicks: monthTicks,
       xFmt: (x) => new Date(start + x * DAY).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }), yFmt: (v) => fmt(v, d),
@@ -966,7 +1273,8 @@ function renderWhatIf() {
 
   $('#wf-method').innerHTML = [
     `Start from what the plant actually measured, since that water came through the ${openFt} ft gate.`,
-    `For each day, take the difference between the other gate and ${openFt} ft in the sonde readings, then shift the measured value by that difference × a fitted slope.`,
+    `For each day, take the difference between the other gate and ${openFt} ft in the sonde readings — each averaged over the ${windowM()} m withdrawal band set above — then shift the measured value by that difference × a fitted slope.`,
+    `The result is a <b>difference</b>, not a measurement of the other gate. Decision 0003 retired the per-gate absolute value: with the sonde mid-reservoir and only the ${openFt} ft gate ever open, we cannot defend "G3 would have measured x".`,
     `Alkalinity uses computed specific conductance (slope ${fmt(ta.beta[0], 3)} mg/L per µS/cm, ${ta.lag} d later, detrended R² ${fmt(ta.r2Detrended, 2)}, n=${ta.n}). The river gage gives an independent slope of about 0.19 on four years of data.`,
     `TOC uses turbidity and conductance (slopes ${tt.beta.map((b, q) => `${tt.features[q]} ${fmt(b, 4)}`).join(', ')}; ${tt.lag} d later, detrended R² ${fmt(tt.r2Detrended, 2)}, n=${tt.n}).`,
     `Slopes are fitted on short-term swings (${G.detrendDays}-day moving mean removed) so the spring-to-summer drift can't masquerade as a depth effect. Temperature is left out deliberately: shallow water is warmer from the sun, not because it is different water.`,
@@ -976,7 +1284,6 @@ function renderWhatIf() {
 }
 
 // ---------- gate advisor ----------
-const TURB_CONCERN = 10;  // Jake, 2026-09-25: above 10 NTU is a concern
 const LAYERS = [0, 1, 2];  // ± 1 m bins, i.e. 1, 3 and 5 m withdrawal layers (decision 0002, O2)
 const LAYER_M = LAYERS.map((w) => 2 * w + 1);
 
@@ -1066,6 +1373,7 @@ function renderAdvisor() {
     `<b>Switch</b> = ${openFt} ft is above ${TURB_CONCERN} NTU and the gate is under it, in every layer. <b>Small gain</b> = the gate is lower in every layer but on the same side of ${TURB_CONCERN} NTU. <b>Stay</b> = otherwise.`,
     'The sonde is mid-reservoir and the gates are on the intake tower at the edge (Jake: "loose correlation"). Trust the ranking more than the numbers. The advisor suggests; operators and their decision makers decide.',
     `The sonde file ends ${S.end}. With a live sonde feed the latest day would be today.`,
+    `<b>There is a second answer to this question.</b> Switch <i>decision view</i> to "Gate ranking" for a standing order over a period, with an explicit margin and a flicker count. Same data and the same ${TURB_CONCERN} NTU line; a different unit of answer. Which one operators should be handed is an open team question.`,
   ].map((t) => `<li>${t}</li>`).join('');
 }
 
@@ -1181,6 +1489,9 @@ async function init() {
   $('#dp-param').innerHTML = Object.entries(T.sonde.params).map(([k, p]) => `<option value="${k}"${k === 'turb' ? ' selected' : ''}>${p.label}</option>`).join('');
   $('#dp-param').addEventListener('change', renderDepth);
   document.querySelectorAll('input.gate').forEach((g) => g.addEventListener('change', renderDepth));
+  $('#dp-window').addEventListener('change', renderDepth);
+  $('#dp-period').addEventListener('change', renderDepth);
+  $('#dp-view').addEventListener('change', renderDepth);
   $('#wf-gate').addEventListener('change', renderWhatIf);
   $('#ga-day').addEventListener('change', renderAdvisor);
   renderEvents();

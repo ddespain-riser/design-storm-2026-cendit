@@ -43,7 +43,7 @@ Link to a day in Replay with a hash, e.g. http://localhost:8766/#2023-08-01.
 | **Replay** | What did past events do as they moved through the system? Scrub or play any day, see detected events, what a model would have projected, and past days like this one. |
 | **Live** | What does the system look like right now? Latest provisional readings and the NWS outlook at Strontia. |
 | **Forecast** | Given today's upstream conditions and this morning's plant reading, what's coming in the next 7 days? The +4 day action window is highlighted. |
-| **Reservoir depth** | Which gate would give Foothills the easiest water to treat on a given day (gate advisor)? What does the Strontia water column look like by depth, and how would plant TOC and alkalinity change if Foothills drew from a gate other than 45 ft? |
+| **Reservoir depth** | Which gate should Foothills draw from? Two takes on that question, switchable at the top of the tab: a **daily gate advisor** and a **standing ranking with a margin**. Then what the Strontia water column looks like by depth, and a supporting model of how plant TOC and alkalinity would shift at another gate. |
 | **Years** | How do wet and dry years differ? Each water year overlaid, labelled by snowpack. |
 | **Lags & skill** | How many days does the river lead the plant, and how much better is each model than repeating the last plant reading? |
 
@@ -81,17 +81,45 @@ They aren't a replacement for Jake's random forests.
 - **Heads-up.** Past days at the same time of year with a similar 3-day change in
   turbidity × flow, and what plant TOC and alkalinity did 4 days later. It reports
   counts and ranges, not advice.
-- **Gate what-if.** Starts from what the plant measured through the 45 ft gate, then
-  shifts it by the other gate's same-day difference in sonde readings times a slope
-  fitted on detrended data. Alkalinity uses specific conductance (0.28 mg/L per µS/cm);
-  TOC uses turbidity (0.019 mg/L per NTU). The shaded ranges come from a 7-day block
-  bootstrap. Result for April to August 2026: no gate changes TOC meaningfully, and
-  deeper gates carry slightly more alkalinity.
-- **Gate advisor.** Turbidity only. For each sonde day, compares every gate's measured
-  turbidity with the open 45 ft gate in 1, 3 and 5 m layers centred on the gate. It says
-  **switch** if 45 ft is above 10 NTU (Jake) and another gate is under it in every
-  layer, **small gain** if another gate is lower in every layer but on the same side of
-  10 NTU, else **stay**. A day-by-day strip shows how long a suggestion held.
+Two of them answer the same question — which gate — and the **decision view** selector at
+the top of the Reservoir depth tab switches between them. They were built independently
+against [decision 0003](../thinking/decisions/0003-prototype-priorities.md) and agree on
+the defensible core: turbidity only, 10 NTU as the line, and 1/3/5 m layers for the
+unknown withdrawal band. They differ in what they hand you, and that difference is still
+an open team question, so both ship.
+
+- **Gate advisor** (the default). Answers *for one day*. Turbidity only. For each sonde
+  day, compares every gate's measured turbidity with the open 45 ft gate in 1, 3 and 5 m
+  layers centred on the gate. It says **switch** if 45 ft is above 10 NTU (Jake) and
+  another gate is under it in every layer, **small gain** if another gate is lower in
+  every layer but on the same side of 10 NTU, else **stay**. A day-by-day strip shows how
+  long a suggestion held. The all-layers rule is the conservative one: a gate has to win
+  however thick a layer it turns out to draw.
+- **Gate ranking, with a margin.** Answers *for a period*. Gates are ordered by *measured*
+  sonde turbidity at each gate's depth — no model — and two gates are called **tied**
+  when they sit closer together than the median cast-to-cast swing in the record. The
+  panel reports the order, the separation in NTU and in noise units, where the clean
+  layer sits, and a cross-check of the leading gate on temperature, chlorophyll,
+  phycocyanin and oxygen, because turbidity alone will always favour the surface.
+  Turbidity is the axis because it is the one threshold an SME gave us: above 10 NTU is
+  a concern.
+- **Withdrawal-band sensitivity.** Nobody knows what band of depths an open gate draws,
+  and Jake asked us. So it is a control, not a constant: the ranking is recomputed with
+  the sonde averaged over 1 m, 3 m and 5 m around each gate, and the page states whether
+  the order survives. If it does, that uncertainty is harmless for this decision; if it
+  inverts, that is a specific ask for an engineer, which beats a guess.
+- **Gate history.** Every gate ranked on every cast day in the record, with how often
+  each was cleanest, how often the leader changed, and the longest unbroken run — so an
+  operator can see whether the recommendation holds or flickers.
+- **Gate what-if.** Supporting evidence only. Starts from what the plant measured
+  through the 45 ft gate, then shifts it by the other gate's same-day *difference* in
+  sonde readings times a slope fitted on detrended data. Alkalinity uses specific
+  conductance (0.28 mg/L per µS/cm); TOC uses turbidity (0.019 mg/L per NTU). The shaded
+  ranges come from a 7-day block bootstrap. Read the direction and the shape of the
+  shift; **the page deliberately does not state what a given gate would have delivered
+  as a number.** The sonde is mid-reservoir and only the 45 ft gate has ever been open,
+  so that claim is not defensible, and team cendit retracted it in
+  [decision 0003](../thinking/decisions/0003-prototype-priorities.md).
 
 ## Rules that are ours, not Denver Water's
 
@@ -115,19 +143,36 @@ They aren't a replacement for Jake's random forests.
 - **Reservoir releases, which gate is actually drawing, and water from other sources
   aren't inputs.**
 - **The sonde record covers 2026-04-07 to 08-19 only**, one dry spring and summer.
-- **The gate advisor suggests; it doesn't decide.** The sonde is mid-reservoir, not at
-  the intake tower, and only the 45 ft gate has plant outcomes behind it. Nothing here
-  recommends a dosing decision.
+- **Both gate views suggest; neither decides.** The advisor offers a daily suggestion and
+  the ranking an ordering with a stated margin, for an operator to hand upward. Neither is
+  an instruction, neither accounts for what a different draw would do to the reservoir
+  itself or to treatment downstream, and nothing here recommends a dosing decision.
+- **The sonde is mid-reservoir, not on the intake tower**, so both describe what the
+  column holds at each gate's depth, not what the tower would deliver. Only the 45 ft gate
+  has plant outcomes behind it.
 
 ## Open questions for Denver Water
 
-1. Are the gate depths below the surface, or fixed elevations on the tower?
-2. Has Foothills ever drawn from another gate, even for a day? That would test the
-   what-if directly.
-3. Is "TOC above 3 within 14 days" the right line between major and minor events?
-4. Can we have the twice-daily plant readings rather than daily values?
-5. Where will the fluorescence organic-matter sensor sit, and when will it have data?
-6. What is Denver Water's own dry/normal/wet rule?
+1. ~~Are the gate depths below the surface, or fixed elevations on the tower?~~
+   **Answered by Cassidi, 2026-09-25:** 15, 45, 65 and 95 ft below the surface, with
+   45 ft open by default. Strontia is held very stable because it sits directly above
+   treatment, so depth maps to gate without a storage correction to first order.
+2. ~~Has Foothills ever drawn from another gate, even for a day?~~ **No — only the
+   45 ft gate has ever been open.** That is why the gate ranking is built on measured
+   sonde readings at depth rather than on the modelled what-if: nothing here has been
+   checked against a real gate change, and only a real one would check it.
+3. What band of depths does an open gate actually draw from? Jake asked *us* this. We
+   cannot answer the physics, so the page answers whether it matters — see the
+   withdrawal-band sensitivity above. Settling it needs the withdrawal rate and the
+   tower geometry from an engineer.
+4. Does the mid-reservoir sonde represent what the intake tower draws? Jake calls the
+   relationship "more like loose correlation." Is anything at all measured at the tower,
+   and how far is it from the sonde? This is the cap on every claim on the Reservoir
+   depth tab.
+5. Is "TOC above 3 within 14 days" the right line between major and minor events?
+6. Can we have the twice-daily plant readings rather than daily values?
+7. Where will the fluorescence organic-matter sensor sit, and when will it have data?
+8. What is Denver Water's own dry/normal/wet rule?
 
 ## Data terms
 

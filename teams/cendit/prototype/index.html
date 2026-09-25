@@ -156,14 +156,52 @@
   <!-- Reservoir depth -->
   <section id="view-depth" class="view hidden">
     <div class="card controls">
+      <label class="inline" title="Two independent answers to the same question, built against decision 0003. They agree on the core and differ in what they hand you.">decision view
+        <select id="dp-view">
+          <option value="advisor" selected>Gate advisor — one day</option>
+          <option value="ranking">Gate ranking — a period, with a margin</option>
+        </select>
+      </label>
       <label class="inline">parameter <select id="dp-param"></select></label>
       <span class="inline note">Strontia gates, ft below surface:</span>
       <label class="inline">G1 <input id="gate0" class="gate" type="number" min="0" max="157" step="5" value="15"></label>
       <label class="inline">G2 <input id="gate1" class="gate" type="number" min="0" max="157" step="5" value="45"></label>
       <label class="inline">G3 <input id="gate2" class="gate" type="number" min="0" max="157" step="5" value="65"></label>
       <label class="inline">G4 <input id="gate3" class="gate" type="number" min="0" max="157" step="5" value="95"></label>
+      <label class="inline" title="Nobody knows what band of depths an open gate actually draws (Q23). Average the sonde over this much of the column around each gate.">draws over
+        <select id="dp-window">
+          <option value="1">1 m</option>
+          <option value="3" selected>3 m</option>
+          <option value="5">5 m</option>
+        </select>
+      </label>
+      <label class="inline" id="dp-period-label">period
+        <select id="dp-period">
+          <option value="14">last 14 days</option>
+          <option value="30" selected>last 30 days</option>
+          <option value="0">whole record</option>
+        </select>
+      </label>
     </div>
-    <div class="grid">
+    <div class="grid" id="rec-view">
+      <div class="card">
+        <h3>Which gate would we recommend?</h3>
+        <p class="note" id="rec-intro"></p>
+        <div id="rec-headline"></div>
+        <div id="rec-rank"></div>
+        <h3 style="margin-top:14px">Has this answer held, or does it flicker?</h3>
+        <div id="rec-history"></div>
+      </div>
+      <aside>
+        <div class="card"><h3>Does the order survive Q23?</h3><div id="rec-sensitivity"></div></div>
+        <div class="card"><h3>Where the clean layer sits</h3><div id="rec-layer"></div></div>
+        <div class="card">
+          <h3>What this is and isn't</h3>
+          <ul class="note" id="rec-caveats"></ul>
+        </div>
+      </aside>
+    </div>
+    <div class="grid" id="ga-view">
       <div class="card">
         <h3>Gate advisor: which gate gives Foothills the easiest water to treat?</h3>
         <div class="controls">
@@ -195,7 +233,7 @@
           <ul class="note">
             <li>Strontia has 4 gates at different heights (Jake). The defaults, 15, 45, 65 and 95 ft, are the team's gate depths, read as feet below the water surface. Only the 45 ft gate is open, so everything Foothills measured came through it. You can change the other three.</li>
             <li>Depth is below the water surface, and the surface moves with storage, so a real gate's depth drifts.</li>
-            <li>One sonde, one location. It was installed spring 2026 and the file covers 2026-04-07 to 08-19, with gaps.</li>
+            <li><b>One sonde, mid-reservoir</b> — not at the intake tower. Whether it represents the water a gate draws is open (Q24). It was installed spring 2026 and the file covers 2026-04-07 to 08-19, with gaps.</li>
             <li>"Best" is lowest turbidity, chlorophyll or phycocyanin, or highest oxygen. It isn't TOC, which the sonde doesn't measure.</li>
             <li>Units marked "as logged" are as the file gives them. The sheet doesn't name them.</li>
           </ul>
@@ -204,7 +242,7 @@
     </div>
     <div class="grid">
       <div class="card">
-        <h3>What if Foothills drew from a different gate?</h3>
+        <h3>Supporting evidence: a modelled gate-to-gate difference</h3>
         <p class="note" id="wf-intro"></p>
         <div class="controls">
           <label class="inline">compare the open gate with <select id="wf-gate"></select></label>

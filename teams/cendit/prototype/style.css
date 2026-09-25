@@ -83,4 +83,9 @@ code { background: #0d151d; padding: 1px 4px; border-radius: 4px; }
 .blind td.l { text-align: left; white-space: normal; }
 td.l { text-align: left; white-space: normal; }
 input.gate { width: 60px; }
+/* The one sentence a panel is willing to be quoted on. */
+.headline { margin: 6px 0 8px; padding: 8px 10px; border-left: 3px solid var(--muted); background: #1b2836; font-size: 14px; border-radius: 0 6px 6px 0; }
+.headline.good { border-left-color: var(--ok); }
+.headline.neutral { border-left-color: var(--accent); }
+.headline.warn { border-left-color: var(--warn); }
 tr.decision td { background: #2a2a14; }
