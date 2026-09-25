@@ -48,6 +48,12 @@ Every question carries four things:
 - New content lands in [`../../content/`](../../content/) → re-read the register
   against it. Some questions are now answered, some are sharpened, some are newly
   raised by what was said.
+- A teammate's working notes land → fold their questions in and leave the notes
+  beside the register as a source document, with a mapping table saying where each
+  question went. Do not rewrite the notes; the register is what we ask from, and
+  the notes are the record of how a question got there.
+  [`coleman-scenario-3-events-and-questions.md`](coleman-scenario-3-events-and-questions.md)
+  is the worked example.
 - A decision is accepted → its open questions belong here, and questions the
   decision settled move to Resolved.
 - A question is answered → move it to the **Resolved** table with its answer and

@@ -1,3 +1,27 @@
+# Coleman's Scenario 3 notes: domain events and questions
+
+- **Author:** Coleman Buffa · **Added:** 2026-09-24 (commit `a0d3ccd`, then moved here)
+- **Kind:** hand-authored working notes. Not the register.
+
+A source document, kept as written. [`open-questions.md`](open-questions.md) is
+the ranked register and is the thing to read before an SME call; this is one of
+the inputs that feeds it. Where the two disagree, the register is current and
+this file is the record of how we got there.
+
+The questions below have been folded into the register — see the
+[mapping](#where-these-questions-went) at the end. The domain event tables have
+not been folded anywhere, and are the most useful part of this file: they are the
+only place we have written down what happens to the water, in order, against the
+files that show each step.
+
+Coleman's own marking convention holds throughout: **(GK)** means general water
+knowledge rather than something in Denver Water's materials, and needs confirming
+before we rely on it. That is the same rule `AGENTS.md` sets for the whole repo.
+
+---
+
+## Original notes
+
 Thinking of building a 'what if' simulator
 
 
@@ -85,3 +109,28 @@ Keep two timelines apart: **when something happens to the water** and **when som
 | **TOC Excursion Began** | TOC went above 3 mg/L: more treatment work and a disinfection-byproduct compliance risk. | Computed from the same file |
 | **Alkalinity Excursion Began** | Alkalinity went below 60 mg/L: the coagulation chemistry needs compensating. | Computed from the same file |
 | *Adjust Treatment* (command, not event) | Operators changed dosing or staffing. Everything in Scenario 1 exists to move this **before** the excursion instead of after. | Not in the data |
+
+---
+
+## Where these questions went
+
+Added to this file when the notes were folded into
+[`open-questions.md`](open-questions.md), so the register stays the single place
+we rank from. Ask against the register, not against this list.
+
+| From these notes | In the register |
+|---|---|
+| Reservoir release controls; minimum reservoir levels | **Q14** — releases between the gage and the plant |
+| Does higher flow mean more or less TOC? | **Q15** — answerable from the data first |
+| 1. What counts as a dry year? | **Q16** |
+| 2. Which snow station stands for the basin? | **Q17** (the 531-vs-938 naming half is already settled: **R6**) |
+| 3. How do reservoir releases shape what arrives downstream? | **Q14**, same as the release-controls question above |
+| 4. When does Strontia turn over, and does it matter at the plant? | **Q18** |
+| 5. Four hours vs a two-to-four-day model lag | Already **Q3**, and one of our central problems |
+| 6. Foothills intake: fixed depth or a choice of depths? | Already **Q13**, widened to cover both intakes |
+
+The **two clocks** framing — when something happens to the water versus when
+someone finds out — was not turned into a question because it is not one. It is a
+claim about the shape of the problem, and a good one. Per the register's own rule
+— anything that reads like a conclusion has stopped being a question — it wants
+writing up as a [decision record](../decisions/), which nobody has done yet.
