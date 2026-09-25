@@ -37,3 +37,4 @@ moved is the useful part.
 | # | Title | Status |
 |---|-------|--------|
 | [0001](0001-problem-statement-strontia-withdrawal-depth.md) | Problem statement: which depth to withdraw from at Strontia Springs | Proposed |
+| [0002](0002-options-for-depth-decision-support.md) | Options for operator-facing depth decision support | Proposed |
