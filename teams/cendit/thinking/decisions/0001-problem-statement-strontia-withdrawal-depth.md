@@ -1,10 +1,19 @@
 # 0001. Problem statement: which depth to withdraw from at Strontia Springs
 
 - **Status:** Proposed
-- **Date:** 2026-09-24, revised 2026-09-25
+- **Date:** 2026-09-24, revised 2026-09-25, corrected 2026-09-25 (afternoon)
 - **Deciders:** team cendit
 
 ## Context
+
+> **Correction, 2026-09-25 afternoon.** Two factual claims below were wrong when
+> written and are corrected in place: the sonde's depth range, and the assertion
+> that the gate heights are unknown. Both corrections came out of the SME
+> interviews that afternoon, and both move in the same direction — the data
+> supports more than we thought. The options that follow from them are ranked in
+> [0002](0002-options-for-depth-decision-support.md). One new limitation surfaced
+> in the same conversations and is recorded under
+> [Consequences](#consequences): the sonde does not sit at the gates.
 
 This record originally framed our effort around **volume and timing of water
 arriving at Foothills** — inferred from Jake's remark that lead time helps with
@@ -27,12 +36,20 @@ Denver Water asked for arrival volume.
 
 **We have the most data on this question.** `data/Strontia 0407_0819.xlsx` is a
 depth-resolved profiling-sonde record: 16,093 readings over 104 days, 2026-04-07
-through 2026-08-19, spanning vertical positions **4.68 m to 20.73 m**, carrying
-temperature, conductivity, pH, ORP, turbidity, chlorophyll, phycocyanin and
-dissolved oxygen. That is the densest and least-examined file in the repo. By
-contrast, the target variable the old framing needed — a Foothills intake volume
-series — **does not exist** (Q2); the plant's own quality readings are twice-daily
-grab samples.
+through 2026-08-19, spanning vertical positions **0.85 m to 47.82 m**
+(2.8–156.9 ft), carrying temperature, conductivity, pH, ORP, turbidity,
+chlorophyll, phycocyanin and dissolved oxygen. Those readings are **~390 casts, 3.8
+per day**, at roughly 0.25 m vertical resolution. That is the densest and
+least-examined file in the repo. By contrast, the target variable the old framing
+needed — a Foothills intake volume series — **does not exist** (Q2); the plant's
+TOC and alkalinity are twice-daily grab samples, though Jake later told us the
+plant does run turbidity, temperature, pH and conductivity at 1–5 minute
+resolution, none of which is in this repository.
+
+> *Corrected.* This paragraph originally gave the sonde range as **4.68 m to
+> 20.73 m**, which would have left the 95 ft gate outside the profiled column. Read
+> directly from the workbook, the true range is 0.85–47.82 m and **all 104 days
+> reach past the deepest gate** at 29.0 m. The error understated our coverage.
 
 **Jake posed this question himself and does not have the answer.** He described
 **four gates at different heights** in Strontia, said Denver Water can within
@@ -40,6 +57,12 @@ limits choose where to pull from, and said a goal of the profiling sonde is to
 work out in real time whether pulling from a different level would improve water
 quality. He also said plainly that they are still trying to figure out how to use
 the sonde data at all. Nobody has looked at this yet.
+
+**The gate depths are now known.** Cassidi gave them on 2026-09-25: **15, 45, 65
+and 95 ft below the surface**, with **45 ft open by default** and the others closed
+(`../../content/depth-interview-notes.md`). Strontia is held very stable because it
+sits directly above treatment, so depth maps to gate without a storage correction
+to first order.
 
 ## Decision
 
@@ -58,11 +81,16 @@ sits, how deep and how stable it is, how fast it shifts, and which analytes
 actually separate the layers. Deliver it well enough that an operator recognises
 their reservoir in it.
 
-**Phase 2, turn that into a withdrawal recommendation (stretch).** Map depth onto
+**Phase 2, turn that into a withdrawal recommendation (committed).** Map depth onto
 the gates and onto treatment consequence — for a given profile, which gate yields
 the lowest turbidity and organic load, and what that is worth in coagulant and
-pre-oxidation. Gate heights are unknown (Q20), so this phase runs on assumed
-elevations as a sensitivity study unless Jake supplies or approves them.
+pre-oxidation.
+
+> *Corrected.* Phase 2 was a **stretch** that "runs on assumed elevations as a
+> sensitivity study" because gate heights were unknown. They are known now, and the
+> sonde covers all four, so Phase 2 is committed and runs on real depths. The
+> sensitivity study that remains is a different one — how thick a layer each gate
+> actually draws, which nobody knows.
 
 ## Scope
 
@@ -85,9 +113,10 @@ elevations as a sensitivity study unless Jake supplies or approves them.
   stratification and inflow; it is no longer the thing we predict.
 - A hydraulic or CFD model of the reservoir. We are working from the observed
   profile, not simulating the water body.
-- Any claim about actual gate elevations, crew sizes, shift rules, or chemical
-  inventories. We have no data on those and will not invent them. Assumed gate
-  heights are labelled as assumptions everywhere they appear.
+- Any claim about crew sizes, shift rules, or chemical inventories. We have no data
+  on those and will not invent them. (Gate elevations were in this list as
+  something we had to assume; Cassidi has since given us the real ones, so they are
+  now sourced fact rather than assumption.)
 - Predicting TOC as a soft sensor in its own right — Jake has walked that path.
 
 ## Why this and not the alternatives
@@ -114,8 +143,24 @@ quality — with a decision attached.
 
 ## Consequences
 
-- Q20 (gate heights) moves from a side question to a gate on Phase 2. We should
-  ask Jake for the four elevations, or for permission to model them, this week.
+- ~~Q20 (gate heights) moves from a side question to a gate on Phase 2. We should
+  ask Jake for the four elevations, or for permission to model them, this week.~~
+  **Answered 2026-09-25 by Cassidi: 15, 45, 65, 95 ft, default 45.** Q20 is closed
+  and drops out of the register.
+- **New limitation: the sonde is not at the gates.** Jake flagged this as a point
+  of contention — the sonde is mid-reservoir, the gates are on the intake tower at
+  the edge, and the relationship is "more like loose correlation"
+  (`../../content/notes-jake-1210.md`). This does not sink the work, but it caps
+  the claim: we can rank the gates and describe the layers, and we cannot state
+  what a given gate would have delivered as a number. Handled as O2 in
+  [0002](0002-options-for-depth-decision-support.md).
+- **The decision cadence is daily, not continuous.** Jake said gates would not
+  change more than about once a day, and that post-storm water holds for three to
+  four days. The 3.8-casts-per-day resolution is finer than the decision needs.
+- **Only the 45 ft gate has ever been open**, so every Foothills reading came
+  through it. The other three gates are counterfactual and no observed plant
+  outcome exists for them; we can calibrate the sonde-to-plant link at one depth
+  only.
 - The sonde record is **104 days in a single season**. It cannot support an event
   study across wet and dry years, and we must not claim one. Anything seasonal we
   say is one spring-to-summer, stated as such.
@@ -145,11 +190,16 @@ than anything Denver Water asked for.
 These live in the [question register](../questions/open-questions.md), ranked and
 kept current as new content lands. The ones that now gate this record:
 
-- **[Q20](../questions/open-questions.md#q20-what-are-the-strontia-gate-heights)** —
-  the four gate elevations, or permission to model them. Blocks Phase 2.
+- ~~**[Q20](../questions/open-questions.md#q20-what-are-the-strontia-gate-heights)** —
+  the four gate elevations, or permission to model them. Blocks Phase 2.~~
+  **Answered.** See Consequences.
 - **[Q21](../questions/open-questions.md#q21-what-continuous-data-exists-that-is-not-in-the-repo)** —
   whether a longer profiler record or the fDOM test data exists. Either would
-  widen the 104-day window.
+  widen the 104-day window. Now also covers the plant's 1–5 minute turbidity,
+  temperature, pH and conductivity, which would replace twice-daily grab samples
+  as a validation target.
+- **Is anything measured at the intake tower itself?** Would settle the
+  sonde-is-not-at-the-gates limitation directly.
 - **[Q14](../questions/open-questions.md#q14-do-reservoir-releases-decide-what-arrives)** —
   whether releases are an operator's choice, which is now the mechanism we are
   studying rather than a confound.
