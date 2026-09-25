@@ -41,6 +41,7 @@ let T;            // twin.json
 let hist;         // committed daily dataset
 let live = null;  // live dataset
 const state = { mode: 'replay', i: 0, window: 60, playing: null, events: [], eventInfo: null, sel: null };
+const hiddenSeries = new Set();
 
 // ---------- helpers ----------
 function el(tag, attrs = {}, parent) {
@@ -400,9 +401,10 @@ function xyChart({ width = 560, height = 240, xDomain, yDomain, xTicks, yTicks, 
     el('rect', { x: x(v.x0), y: Tm, width: x(v.x1) - x(v.x0), height: height - Tm - B, fill: v.color || 'var(--warn)', opacity: 0.12 }, svg);
     if (v.label) txt(svg, (x(v.x0) + x(v.x1)) / 2, Tm + 12, v.label, { 'text-anchor': 'middle' });
   }
+  const layer = (key) => (key ? el('g', { 'data-series': key, style: hiddenSeries.has(key) ? 'display:none' : null }, svg) : svg);
   for (const b of bands) {
     const up = b.points.map((p) => `${x(p[0])},${y(p[2])}`), dn = b.points.slice().reverse().map((p) => `${x(p[0])},${y(p[1])}`);
-    el('polygon', { points: up.concat(dn).join(' '), fill: b.color, opacity: 0.18 }, svg);
+    el('polygon', { points: up.concat(dn).join(' '), fill: b.color, opacity: 0.18 }, layer(b.key));
   }
   for (const h of hlines) {
     el('line', { x1: L, x2: width - R, y1: y(h.y), y2: y(h.y), stroke: h.color || 'var(--bad)', 'stroke-dasharray': '4 3' }, svg);
@@ -413,14 +415,24 @@ function xyChart({ width = 560, height = 240, xDomain, yDomain, xTicks, yTicks, 
     if (!pts.length) continue;
     let d = '', pen = false;
     for (const p of s.points) { if (p[1] == null) { pen = false; continue; } d += (pen ? 'L' : 'M') + x(p[0]).toFixed(1) + ',' + y(p[1]).toFixed(1); pen = true; }
-    if (s.width !== 0) el('path', { d, fill: 'none', stroke: s.color, 'stroke-width': s.width || 1.6, 'stroke-dasharray': s.dash || null, opacity: s.opacity ?? 1 }, svg);
-    if (s.dots) pts.forEach((p) => el('circle', { cx: x(p[0]), cy: y(p[1]), r: s.r || 3, fill: s.color }, svg)
+    const g = layer(s.key);
+    if (s.width !== 0) el('path', { d, fill: 'none', stroke: s.color, 'stroke-width': s.width || 1.6, 'stroke-dasharray': s.dash || null, opacity: s.opacity ?? 1 }, g);
+    if (s.dots) pts.forEach((p) => el('circle', { cx: x(p[0]), cy: y(p[1]), r: s.r || 3, fill: s.color }, g)
       .appendChild(Object.assign(document.createElementNS(SVGNS, 'title'), { textContent: `${s.label || ''} ${xFmt(p[0])}: ${yFmt(p[1])}` })));
   }
   return svg;
 }
+// Items are [color, label, dashed, key]; a key makes the entry toggle chart layers with the same key.
 function legend(items) {
-  return `<div class="legend">${items.map(([c, l, dash]) => `<span><i style="background:${c};${dash ? 'height:0;border-top:2px dashed ' + c : ''}"></i>${l}</span>`).join('')}</div>`;
+  return `<div class="legend">${items.map(([c, l, dash, key]) => `<span${key ? ` class="toggle${hiddenSeries.has(key) ? ' off' : ''}" data-series="${key}" title="Click to show or hide"` : ''}><i style="background:${c};${dash ? 'height:0;border-top:2px dashed ' + c : ''}"></i>${l}</span>`).join('')}</div>`;
+}
+function toggleSeries(e) {
+  const item = e.target.closest('.legend [data-series]');
+  if (!item) return;
+  const key = item.dataset.series, off = !hiddenSeries.has(key), sel = `[data-series="${CSS.escape(key)}"]`;
+  if (off) hiddenSeries.add(key); else hiddenSeries.delete(key);
+  document.querySelectorAll('.legend ' + sel).forEach((s) => s.classList.toggle('off', off));
+  document.querySelectorAll('g' + sel).forEach((g) => { g.style.display = off ? 'none' : ''; });
 }
 
 // ---------- replay ----------
@@ -631,16 +643,16 @@ function runForecast() {
     const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.1 || 1;
     const start = priors[t];
     const box = document.createElement('div');
-    box.innerHTML = `<b>${t === 'toc' ? 'TOC' : 'Alkalinity'} (mg/L)</b>` + legend([['#fff', 'hybrid ± rough 80% band'], ['#f0b429', 'upstream-only', true], ['#8ea2b4', 'persistence', true]]);
+    box.innerHTML = `<b>${t === 'toc' ? 'TOC' : 'Alkalinity'} (mg/L)</b>` + legend([['#fff', 'hybrid ± rough 80% band', false, 'fc:hybrid'], ['#f0b429', 'upstream-only', true, 'fc:upstream'], ['#8ea2b4', 'persistence', true, 'fc:persistence']]);
     box.appendChild(xyChart({
       width: 620, height: 210, xDomain: [0, 7], yDomain: [lo - pad, hi + pad], xTicks: range(0, 7), xFmt: (v) => (v ? '+' + v + ' d' : 'day 0'), yFmt: (v) => fmt(v, d),
-      bands: [{ points: p.filter((r) => r.hybrid != null).map((r) => [r.h, r.hybrid - 1.28 * r.rmse, r.hybrid + 1.28 * r.rmse]), color: '#fff' }],
+      bands: [{ points: p.filter((r) => r.hybrid != null).map((r) => [r.h, r.hybrid - 1.28 * r.rmse, r.hybrid + 1.28 * r.rmse]), color: '#fff', key: 'fc:hybrid' }],
       vbands: [{ x0: DECISION_H - 0.5, x1: DECISION_H + 0.5, label: 'action window' }],
       hlines: [{ y: lim, label: t === 'toc' ? 'TOC 3 mg/L' : 'alkalinity 60 mg/L' }],
       series: [
-        { points: [[0, start], ...p.map((r) => [r.h, r.hybrid])], color: '#fff', dots: true, label: 'hybrid' },
-        { points: p.map((r) => [r.h, r.upstream]), color: '#f0b429', dash: '5 3', dots: true, r: 2, label: 'upstream-only' },
-        { points: [[0, start], ...p.map((r) => [r.h, r.persistence])], color: '#8ea2b4', dash: '2 3', label: 'persistence' },
+        { points: [[0, start], ...p.map((r) => [r.h, r.hybrid])], color: '#fff', dots: true, label: 'hybrid', key: 'fc:hybrid' },
+        { points: p.map((r) => [r.h, r.upstream]), color: '#f0b429', dash: '5 3', dots: true, r: 2, label: 'upstream-only', key: 'fc:upstream' },
+        { points: [[0, start], ...p.map((r) => [r.h, r.persistence])], color: '#8ea2b4', dash: '2 3', label: 'persistence', key: 'fc:persistence' },
       ],
     }));
     charts.appendChild(box);
@@ -806,12 +818,12 @@ function renderDepth() {
   const vals = perGate.flat().filter((v) => v != null);
   const monthTicks = range(0, nDays - 1).filter((d) => new Date(start + d * DAY).getUTCDate() === 1);
   const box = $('#dp-gates');
-  box.innerHTML = legend(gates.map((g, k) => [GATE_COLORS[k], `G${k + 1} at ${feet[k]} ft`]));
+  box.innerHTML = legend(gates.map((g, k) => [GATE_COLORS[k], `G${k + 1} at ${feet[k]} ft`, false, 'gate:' + k]));
   if (vals.length) {
     box.appendChild(xyChart({
       width: 900, height: 220, xDomain: [0, nDays - 1], yDomain: [Math.min(...vals), Math.max(...vals) * 1.02 || 1],
       xTicks: monthTicks, xFmt: (d) => new Date(start + d * DAY).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }), yFmt: (v) => fmt(v, 1),
-      series: perGate.map((pts, k) => ({ points: pts.map((v, d) => [d, v]), color: GATE_COLORS[k], width: 1.6 })), yLabel: P.unit,
+      series: perGate.map((pts, k) => ({ points: pts.map((v, d) => [d, v]), color: GATE_COLORS[k], width: 1.6, key: 'gate:' + k })), yLabel: P.unit,
     }));
   }
 
@@ -898,16 +910,16 @@ function renderWhatIf() {
     }
     const div = document.createElement('div');
     div.innerHTML = `<b>${target === 'toc' ? 'TOC' : 'Alkalinity'} at Foothills (mg/L)</b>` +
-      legend([['#dbe5ee', `measured (${openFt} ft gate)`], [GATE_COLORS[k], `what-if: G${k + 1} ${feet[k]} ft`], ['var(--warn)', 'what-if outside the fitted range']]);
+      legend([['#dbe5ee', `measured (${openFt} ft gate)`, false, 'wf:measured'], [GATE_COLORS[k], `what-if: G${k + 1} ${feet[k]} ft`, false, 'wf:whatif'], ['var(--warn)', 'what-if outside the fitted range', false, 'wf:extrap']]);
     div.appendChild(xyChart({
       width: 900, height: 220, xDomain: [0, nDays + 1], yDomain: [lo - pad, hi + pad], xTicks: monthTicks,
       xFmt: (x) => new Date(start + x * DAY).toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }), yFmt: (v) => fmt(v, d),
-      bands: runs.filter((pts) => pts.length > 1).map((pts) => ({ points: pts, color: GATE_COLORS[k] })),
+      bands: runs.filter((pts) => pts.length > 1).map((pts) => ({ points: pts, color: GATE_COLORS[k], key: 'wf:whatif' })),
       hlines: [{ y: lim, label: target === 'toc' ? 'TOC 3' : 'alkalinity 60' }],
       series: [
-        { points: rows.map((r) => [xs(r), r.actual]), color: '#dbe5ee', width: 1.4 },
-        { points: rows.map((r) => [xs(r), r.v]), color: GATE_COLORS[k], width: 1.8 },
-        { points: rows.filter((r) => r.extrap).map((r) => [xs(r), r.v]), color: 'var(--warn)', width: 0, dots: true, r: 2.5, label: 'outside fitted range' },
+        { points: rows.map((r) => [xs(r), r.actual]), color: '#dbe5ee', width: 1.4, key: 'wf:measured' },
+        { points: rows.map((r) => [xs(r), r.v]), color: GATE_COLORS[k], width: 1.8, key: 'wf:whatif' },
+        { points: rows.filter((r) => r.extrap).map((r) => [xs(r), r.v]), color: 'var(--warn)', width: 0, dots: true, r: 2.5, label: 'outside fitted range', key: 'wf:extrap' },
       ],
     }));
     box.appendChild(div);
@@ -942,12 +954,12 @@ function renderWhatIf() {
     xFmt: (v) => v + ' ft', yFmt: (v) => fmt(v, 1),
     vbands: [{ x0: openFt - 3, x1: openFt + 3, color: '#fff', label: `${openFt} ft` }],
     series: [
-      { points: r1.map((v, z) => [depthsFt[z], v]), color: '#b48cff', label: 'alk vs SC' },
-      { points: r2.map((v, z) => [depthsFt[z], v]), color: '#d9a866', label: 'TOC vs turbidity' },
+      { points: r1.map((v, z) => [depthsFt[z], v]), color: '#b48cff', label: 'alk vs SC', key: 'ev:alk' },
+      { points: r2.map((v, z) => [depthsFt[z], v]), color: '#d9a866', label: 'TOC vs turbidity', key: 'ev:toc' },
     ],
   }));
   const p1 = pk(r1), p2 = pk(r2);
-  ev.insertAdjacentHTML('beforeend', legend([['#b48cff', 'alkalinity vs conductance'], ['#d9a866', 'TOC vs turbidity']]) +
+  ev.insertAdjacentHTML('beforeend', legend([['#b48cff', 'alkalinity vs conductance', false, 'ev:alk'], ['#d9a866', 'TOC vs turbidity', false, 'ev:toc']]) +
     `<p class="note">Strongest at about ${fmt(depthsFt[p1], 0)} ft (alkalinity) and ${fmt(depthsFt[p2], 0)} ft (TOC). ${Math.abs(depthsFt[p1] - openFt) < 25 ? 'That is consistent with a 45 ft draw.' : 'That is not obviously a 45 ft signal, so treat the what-if with extra caution.'}
     The curves are broad, because layers near each other carry similar water.</p>`);
 
@@ -970,14 +982,14 @@ function renderYears() {
   hist.dates.forEach((ms, j) => { const wy = waterYear(ms); (byWY[wy] ||= []).push([dayOfWY(ms), hist.series[key][j]]); });
   const vals = Object.values(byWY).flat().map((p) => p[1]).filter((v) => v != null);
   const years = [...new Set([...Object.keys(byWY), ...Object.keys(T.years.labels)])].sort();
-  const series = Object.entries(byWY).map(([wy, pts]) => ({ points: pts, color: yearColor(wy, years), width: wy == 2026 ? 2.4 : 1.5, label: 'WY' + wy }));
-  if (key === 'swe') series.unshift({ points: T.years.medianTrace.map((v, j) => [j, v]), color: '#fff', dash: '3 3', width: 1, label: 'median' });
+  const series = Object.entries(byWY).map(([wy, pts]) => ({ points: pts, color: yearColor(wy, years), width: wy == 2026 ? 2.4 : 1.5, label: 'WY' + wy, key: 'yr:' + wy }));
+  if (key === 'swe') series.unshift({ points: T.years.medianTrace.map((v, j) => [j, v]), color: '#fff', dash: '3 3', width: 1, label: 'median', key: 'yr:median' });
   const hi = Math.max(...vals, ...(key === 'swe' ? T.years.medianTrace.filter((v) => v != null) : []));
   const lo = lane.bars || key === 'swe' ? 0 : Math.min(...vals);
   const monthStarts = [0, 31, 61, 92, 123, 151, 182, 212, 243, 273, 304, 335];
   const box = $('#yr-chart');
   box.innerHTML = `<b>${lane.label}</b> <span class="note">${lane.unit}</span>` +
-    legend([...Object.keys(byWY).map((wy) => [yearColor(wy, years), `WY${wy}${T.years.labels[wy] ? ` (${T.years.labels[wy].label})` : ''}`]), ...(key === 'swe' ? [['#fff', `Hoosier Pass median ${T.years.firstYear}–${T.years.lastYear}`, true]] : [])]);
+    legend([...Object.keys(byWY).map((wy) => [yearColor(wy, years), `WY${wy}${T.years.labels[wy] ? ` (${T.years.labels[wy].label})` : ''}`, false, 'yr:' + wy]), ...(key === 'swe' ? [['#fff', `Hoosier Pass median ${T.years.firstYear}–${T.years.lastYear}`, true, 'yr:median']] : [])]);
   box.appendChild(xyChart({
     width: 900, height: 360, xDomain: [0, 365], yDomain: [lo, hi * 1.05], xTicks: monthStarts,
     xFmt: (v) => ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'][monthStarts.indexOf(v)] || '',
@@ -1006,11 +1018,11 @@ function renderLags() {
   const block = T.lags[target][season];
   const feats = Object.keys(block);
   const box = $('#lag-chart');
-  box.innerHTML = legend(feats.map((f) => [FEATURE_COLORS[f], FEATURE_NAMES[f]]));
+  box.innerHTML = legend(feats.map((f) => [FEATURE_COLORS[f], FEATURE_NAMES[f], false, 'lag:' + f]));
   box.appendChild(xyChart({
     width: 560, height: 280, xDomain: [0, 10], yDomain: [-1, 1], xTicks: range(0, 10), yTicks: [-1, -0.5, 0, 0.5, 1],
     xFmt: (v) => v + ' d', yFmt: (v) => fmt(v, 1), xLabel: 'upstream reading this many days before the lab sample', yLabel: 'ρ',
-    series: feats.map((f) => ({ points: block[f].rho.map((r, j) => [j, r]), color: FEATURE_COLORS[f], dots: true, r: 2, label: FEATURE_NAMES[f] })),
+    series: feats.map((f) => ({ points: block[f].rho.map((r, j) => [j, r]), color: FEATURE_COLORS[f], dots: true, r: 2, label: FEATURE_NAMES[f], key: 'lag:' + f })),
     hlines: [{ y: 0, color: '#556' }],
   }));
   const rows = feats.map((f) => ({ f, ...bestLag(target, season, f) })).sort((a, b) => Math.abs(b.rho ?? 0) - Math.abs(a.rho ?? 0));
@@ -1021,7 +1033,7 @@ function renderLags() {
 }
 function renderSkill() {
   const box = $('#skill-chart');
-  box.innerHTML = legend([['#fff', 'hybrid'], ['#f0b429', 'upstream-only'], ['#8ea2b4', 'persistence']]);
+  box.innerHTML = legend([['#fff', 'hybrid', false, 'sk:hybrid'], ['#f0b429', 'upstream-only', false, 'sk:upstream'], ['#8ea2b4', 'persistence', false, 'sk:persistence']]);
   const text = [];
   for (const t of ['toc', 'alk']) {
     const hz = T.models[t].horizons, d = t === 'toc' ? 2 : 1;
@@ -1033,9 +1045,9 @@ function renderSkill() {
     box.appendChild(xyChart({
       width: 560, height: 190, xDomain: [1, 7], yDomain: [0, Math.max(...all) * 1.1], xTicks: range(1, 7), xFmt: (v) => '+' + v + ' d', yFmt: (v) => fmt(v, d),
       series: [
-        { points: pts('hybrid'), color: '#fff', dots: true, label: 'hybrid' },
-        { points: pts('upstream'), color: '#f0b429', dots: true, dash: '5 3', label: 'upstream-only' },
-        { points: pts('persistence'), color: '#8ea2b4', dots: true, dash: '2 3', label: 'persistence' },
+        { points: pts('hybrid'), color: '#fff', dots: true, label: 'hybrid', key: 'sk:hybrid' },
+        { points: pts('upstream'), color: '#f0b429', dots: true, dash: '5 3', label: 'upstream-only', key: 'sk:upstream' },
+        { points: pts('persistence'), color: '#8ea2b4', dots: true, dash: '2 3', label: 'persistence', key: 'sk:persistence' },
       ],
       vbands: [{ x0: DECISION_H - 0.4, x1: DECISION_H + 0.4, label: 'action window' }],
     }));
@@ -1093,6 +1105,7 @@ async function init() {
   $('#yr-var').addEventListener('change', renderYears);
   $('#lag-target').addEventListener('change', renderLags);
   $('#lag-season').addEventListener('change', renderLags);
+  document.addEventListener('click', toggleSeries);
   window.addEventListener('resize', () => setMode(state.mode));
   document.addEventListener('keydown', (e) => {
     if (state.mode !== 'replay' || ['INPUT', 'SELECT'].includes(e.target.tagName)) return;

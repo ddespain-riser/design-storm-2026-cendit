@@ -73,6 +73,9 @@ footer { padding: 6px 20px 20px; color: var(--muted); font-size: 12px; }
 code { background: #0d151d; padding: 1px 4px; border-radius: 4px; }
 .legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 4px 0; }
 .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; }
+.legend .toggle { cursor: pointer; user-select: none; }
+.legend .toggle:hover { color: var(--text); }
+.legend .toggle.off { opacity: 0.35; text-decoration: line-through; }
 .swatch { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 6px; }
 .alert { border-left: 3px solid var(--bad); padding: 4px 8px; margin: 4px 0; background: #2a1a1a; font-size: 12.5px; }
 .blind { margin-top: 8px; }
